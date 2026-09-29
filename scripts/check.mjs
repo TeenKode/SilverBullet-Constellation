@@ -11,6 +11,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { demoSpace } from "./demo-space.mjs";
 
@@ -39,7 +40,7 @@ function findFile(dir, test) {
   return null;
 }
 
-async function silverbullet(tmp) {
+export async function silverbullet(tmp) {
   if (process.env.SB_BIN) return process.env.SB_BIN;
   const ver = process.env.SB_VERSION || "2.11.1";
   const url = `https://github.com/silverbulletmd/silverbullet/releases/download/${ver}/silverbullet-server-linux-x86_64.zip`;
@@ -53,7 +54,7 @@ async function silverbullet(tmp) {
   return bin;
 }
 
-async function startServer(bin, folder) {
+export async function startServer(bin, folder) {
   const port = await freePort();
   const server = spawn(bin, [folder], { env: { ...process.env, SB_PORT: String(port), SB_HOSTNAME: "127.0.0.1" }, stdio: "ignore" });
   const base = `http://127.0.0.1:${port}/`;
@@ -252,9 +253,11 @@ async function main() {
   }
 }
 
-await main();
-if (failed.length) {
-  console.log(`Constellation: ${failed.length} check(s) failed`);
-  process.exit(1);
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await main();
+  if (failed.length) {
+    console.log(`Constellation: ${failed.length} check(s) failed`);
+    process.exit(1);
+  }
+  console.log("Constellation: all checks passed");
 }
-console.log("Constellation: all checks passed");
