@@ -1,0 +1,16 @@
+{
+  "name": "silverbullet-constellation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Constellation — a living graph view for SilverBullet",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "plug-compile constellation.plug.yaml --dist . && rm -f *.map",
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
+  "devDependencies": {
+    "@silverbulletmd/silverbullet": "2.11.0",
+    "playwright": "^1.63.0"
+  }
+}

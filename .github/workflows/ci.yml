@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: Tests and a real SilverBullet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Unit tests
+        run: npm test
+      - name: The committed plug is built from the sources
+        # the build time (mtime) differs; the minifier sometimes swaps "Z" and "0" in the second character
+        # of short names (X0/XZ) for the same sources — both are ignored
+        run: |
+          norm() { perl -pe 's/mtime:[0-9]+/mtime:0/g; s/(?<![\w\$])([A-Za-z_\$])[Z0](?![\w\$])/$1~/g' "$1"; }
+          norm constellation.plug.js > /tmp/committed.js
+          npm run build
+          norm constellation.plug.js > /tmp/built.js
+          cmp /tmp/committed.js /tmp/built.js || { echo "Rebuild the plug: npm run build"; exit 1; }
+      - name: Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Check in a real SilverBullet
+        run: node scripts/check.mjs

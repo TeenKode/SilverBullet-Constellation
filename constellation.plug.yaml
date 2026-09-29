@@ -1,0 +1,30 @@
+name: constellation
+assets:
+  - "assets/**/*.*"
+functions:
+  openGraph:
+    path: src/constellation.ts:openGraph
+    command:
+      name: "Constellation: Open Graph"
+  toggleGraph:
+    path: src/constellation.ts:toggleGraph
+    command:
+      name: "Constellation: Toggle Side Graph"
+  closeGraph:
+    path: src/constellation.ts:closeGraph
+  updateGraph:
+    path: src/constellation.ts:updateGraph
+    events:
+      - editor:init
+      - editor:pageLoaded
+      - editor:pageReloaded
+  handleNavigate:
+    path: src/constellation.ts:handleNavigate
+  openPage:
+    path: src/constellation.ts:openPage
+  preview:
+    path: src/constellation.ts:preview
+  toggleTask:
+    path: src/constellation.ts:toggleTask
+  setOption:
+    path: src/constellation.ts:setOption
