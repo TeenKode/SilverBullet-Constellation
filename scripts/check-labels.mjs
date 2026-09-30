@@ -34,23 +34,35 @@ if (process.env.CHROME_BIN) launch.executablePath = process.env.CHROME_BIN;
 const browser = await chromium.launch(launch);
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 860 } });
+  page.on("console", (m) => { if (m.text().startsWith("over")) console.log(m.text()); });
   await page.goto(base + "index"); await page.waitForTimeout(9000); await page.reload(); await page.waitForTimeout(7000);
   const find = async () => { let fr = null; for (const f of page.frames()) { try { if (await f.evaluate(() => !!window.__CN_DATA__ && document.body.classList.contains("cn-full"))) fr = f; } catch {} } return fr; };
   let fr = await find();
   if (!fr) { await page.evaluate(() => client.runCommandByName("Constellation: Open Graph")); await page.waitForTimeout(4000); fr = await find(); }
   await page.waitForTimeout(2000);
   const r = await fr.evaluate(() => {
-    const boxes = [...document.querySelectorAll(".cn-node:not(.cn-leaving) text.cn-label")]
-      .filter((t) => parseFloat(getComputedStyle(t).opacity) > 0.05).map((t) => t.getBoundingClientRect());
-    let overl = 0;
-    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
-      const a = boxes[i], b = boxes[j];
-      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) overl++;
+    const nodes = [...document.querySelectorAll(".cn-node:not(.cn-leaving)")];
+    const labels = nodes.map((n) => [n, n.querySelector("text.cn-label")])
+      .filter(([, t]) => t && parseFloat(getComputedStyle(t).opacity) > 0.05)
+      .map(([n, t]) => [n, t.getBoundingClientRect()]);
+    const dots = nodes.map((n) => [n, n.querySelector("circle.cn-dot").getBoundingClientRect()]);
+    const cross = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    let overlaps = 0, overDots = 0;
+    for (let i = 0; i < labels.length; i++) {
+      for (let j = i + 1; j < labels.length; j++) if (cross(labels[i][1], labels[j][1])) overlaps++;
+      for (const [n, dot] of dots) if (n !== labels[i][0] && cross(labels[i][1], dot)) {
+        overDots++;
+        const L = labels[i][1];
+        console.log("over", labels[i][0].querySelector("title").textContent, "→", n.querySelector("title").textContent,
+          Math.round(L.left), Math.round(L.right), Math.round(L.top), Math.round(L.bottom), "|",
+          Math.round(dot.left), Math.round(dot.right), Math.round(dot.top), Math.round(dot.bottom));
+      }
     }
-    return { nodes: document.querySelectorAll(".cn-node").length, labels: boxes.length, overlaps: overl };
+    return { nodes: nodes.length, labels: labels.length, overlaps, overDots };
   });
   if (shot) await page.screenshot({ path: shot });
-  const ok = r.labels >= 8 && r.overlaps === 0;
-  console.log(`${ok ? "✓" : "✗"} labels do not overlap — ${r.nodes} nodes, ${r.labels} labels, ${r.overlaps} overlapping pairs`);
+  const ok = r.labels >= 8 && r.overlaps === 0 && r.overDots === 0;
+  console.log(`${ok ? "✓" : "✗"} labels do not overlap — ${r.nodes} nodes, ${r.labels} labels, ` +
+    `${r.overlaps} overlapping pairs, ${r.overDots} over other nodes`);
   if (!ok) process.exitCode = 1;
 } finally { await browser.close(); server.kill(); }
