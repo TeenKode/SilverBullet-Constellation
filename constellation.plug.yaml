@@ -26,5 +26,7 @@ functions:
     path: src/constellation.ts:preview
   toggleTask:
     path: src/constellation.ts:toggleTask
+  similarity:
+    path: src/constellation.ts:similarity
   setOption:
     path: src/constellation.ts:setOption

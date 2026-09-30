@@ -161,6 +161,35 @@ async function main() {
     const soon = await fr.evaluate(() => [...document.querySelectorAll(".cn-soon")].filter((t) => getComputedStyle(t).display !== "none").map((t) => t.textContent));
     check("“in 5 days” on the upcoming event (once, not on its project)", JSON.stringify(soon) === JSON.stringify(["in 5 days"]), soon.join(", "));
 
+    // constellations: nebulae by links and by the text of the pages
+    await page.waitForTimeout(3000);
+    const neb = await fr.evaluate(() => [...document.querySelectorAll(".cn-neb")].map((g) => g.querySelectorAll("circle").length));
+    check("nebulae are drawn", neb.length >= 1 && neb.every((n) => n >= 3), `constellations: ${neb.join(", ")}`);
+    const labels = await fr.evaluate(() => [...document.querySelectorAll(".cn-neb-label")].map((t) => t.textContent));
+    check("constellation names", labels.length === neb.length && labels.every(Boolean), labels.join(" | "));
+    const garden = ["Ideas/Compost", "Ideas/Seeds", "Ideas/Greenhouse"];
+    const clusters = await fr.evaluate(() => window.__CN_CLUSTERS__());
+    check("the text of the pages gathers unlinked pages into one constellation",
+      clusters.some((c) => garden.every((id) => c.members.includes(id))), clusters.map((c) => `${c.name}(${c.members.length})`).join(", "));
+    check("day summaries are not in constellations", !clusters.some((c) => c.members.some((id) => /\d{4}-\d{2}-\d{2}$/.test(id))));
+    check("starry background and twinkling", await fr.evaluate(() => document.querySelector("#cn-container").classList.contains("cn-starfield")
+      && document.querySelector("svg").classList.contains("cn-twinkle")));
+    // settings: nebulae off and on again
+    await fr.evaluate(() => document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click());
+    await page.waitForTimeout(500);
+    const toggleNebulae = () => fr.evaluate(() => [...document.querySelectorAll(".cn-set-check")]
+      .find((l) => /Nebulae|Туманности/.test(l.textContent)).querySelector("input").click());
+    await toggleNebulae();
+    await page.waitForTimeout(600);
+    check("nebulae can be turned off", await fr.evaluate(() => document.querySelectorAll(".cn-neb").length === 0));
+    await toggleNebulae();
+    await page.waitForTimeout(800);
+    check("… and on again", await fr.evaluate(() => document.querySelectorAll(".cn-neb").length >= 1));
+    await fr.evaluate(() => document.querySelector(".cn-set-actions [data-act=reset]").click());
+    await page.waitForTimeout(800);
+    await fr.evaluate(() => document.querySelector(".cn-icon[data-act=close]").click());
+    if (shots) await page.screenshot({ path: join(shots, "nebulae.png") });
+
     // card, own checkboxes in a CRLF page
     const fair = join(space, "Projects", "Autumn Fair.md");
     let text = await openCard(page, fr, "Projects/Autumn Fair");

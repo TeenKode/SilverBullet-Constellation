@@ -24,11 +24,17 @@ work**. You can tick off tasks without leaving the graph.
 - **Timeline**: a slider shows only pages from the last N days. Recent pages are brighter, older ones fade.
 - **Marks**: a red ring on pages with overdue tasks, and “in N days” on upcoming events.
 - **Links from task attributes**: `[who: Ann]` can link the page to `People/Ann`, so people are not orphans.
-- **Nearby** mode (two steps around the selected page), search, orphans on demand.
+- **Constellations**: pages about the same thing gather and glow like nebulae, each with its own color and a name
+  (click the name to zoom in, hover it to highlight the pages). They are found from the links between pages *and* from
+  the similarity of their texts (TF-IDF, computed in the browser and remembered until a page changes). Day and week
+  summaries are left out: they link everything with everything. Optional thin threads show pages that are alike but
+  not linked.
+- **Nearby** mode (one to three steps around the selected page), search, orphans on demand.
 - **Settings panel** (⚙):
-  - motion: drift, calm, or still;
-  - repulsion and link length;
-  - node size and link width;
+  - motion: drift, calm, or still; repulsion, link length, pull to the center;
+  - constellations: nebulae on/off, brightness, softness of the edges, color (own or by group), names, links ↔ text
+    balance, strictness, size, smallest constellation, how strongly they gather, similarity threads;
+  - node size (by links or equal), link width and brightness, starry background, twinkling, dimming on hover;
   - labels: which to show, brightness, and size;
   - group colors, timeline brightness, marks, and opening on start.
 - English and Russian interface; light and dark theme (follows SilverBullet on the fly); touch friendly.
@@ -103,6 +109,8 @@ config.set("constellation", {
 | `dueAttributes` | `{"due", "deadline"}` | task attributes holding a due date (`YYYY-MM-DD`) for the overdue ring |
 | `upcoming` | `{attribute = "date", days = 14}` | pages whose `attribute` date is within `days` get “in N days”. `prefix` limits the mark to a folder; `mirror` also marks the page with the same name under another prefix (an event's project). Use `false` to switch it off. |
 | `exclude` | — | more pages to hide: `"Folder/"` prefixes or exact names. `Library/`, `Repositories/`, `_…`, `CONFIG`, `PLUGS`, `SETTINGS` and `SECRETS` are always hidden. |
+| `similarity` | `true` | read page texts to find pages about the same thing (constellations). `false` — links only; texts are never read. |
+| `similarityMaxPages` | `1500` | with more pages than this the texts are not read |
 | `extraCss` | `""` | extra CSS for the graph panel, for example styles of your own widgets shown in the card |
 
 Timeline dates: a page named by a date (`Journal/2026-09-28`) uses that day. A page named by an ISO week
