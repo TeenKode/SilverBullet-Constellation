@@ -1328,9 +1328,12 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const applyForces = () => {
     if (!sim) return;
     const count = shown.length;
-    sim.force("link").distance(distanceOf(count));
-    sim.force("charge").strength(chargeOf(count));
-    sim.force("collide").radius((d) => baseRadius(d) + 6);
+    // the same forces as in the layout (applyForceSet): otherwise the slider would move the graph
+    // to another equilibrium — without the length spread of links to hubs and the room for labels — and it would jump
+    let cx = 0, cy = 0;
+    for (const d of shown) { cx += d.x; cy += d.y; }
+    if (count) { cx /= count; cy /= count; }
+    applyForceSet(sim, shownLinks, count, cx, cy, baseRadius);
     if (options.motion === "still") {
       // a still graph: recompute the layout at once, without animation
       sim.alpha(0.3);
