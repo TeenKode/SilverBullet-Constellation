@@ -170,11 +170,11 @@
     }
   })();
   const spaceKey = (key) => (SPACE ? `${key}:${SPACE}` : key);
-  const LAYOUT_KEY = spaceKey("constellation.layout.v1");
+  // v2 — связи разной длины и простор для подписей (1.1): прежняя раскладка v1 не берётся, граф раскладывается заново
+const LAYOUT_KEY = spaceKey("constellation.layout.v2");
   const VIEW_KEY = spaceKey("constellation.view." + VIEW);
   // saved by the plug's previous name (observergraph) — picked up once, then saved under the new keys
   const LEGACY = {
-    [LAYOUT_KEY]: spaceKey("observerGraph.layout.v1"),
     [VIEW_KEY]: spaceKey("observerGraph.view." + VIEW),
   };
 
@@ -217,15 +217,29 @@
   const chargeOf = (count) => -(20 + options.repel * 5) * forceScale(count);
   const distanceOf = (count) => options.linkDistance * (0.6 + 0.4 * forceScale(count));
 
+  // Links of different length: a link to a “hub” (a page with many links — a day summary, a person) is longer,
+  // so its neighbours spread around it in a wide ring instead of a tight clump where labels overlap.
+  // Leaf-to-leaf links stay short, and closely related pages stay close.
+  const endId = (e) => (typeof e === "object" ? e.id : e);
+  function linkSpread(l) {
+    const hub = Math.max(degree(endId(l.source)), degree(endId(l.target)));
+    return Math.min(2.6, 0.75 + 0.3 * Math.sqrt(hub));
+  }
+  // Room for the label: it hangs below the node, so the node needs space around it — half the label width,
+  // not the whole of it (neighbouring labels are also moved apart by hiding overlaps, see cullLabels)
+  const labelHalf = new Map(all.nodes.map((n) => [n.id,
+    Math.max(...wrapLabel(truncate(n.label || n.id, 60)).map((l) => l.length)) * 6.5 * options.labelSize / 100 / 2]));
+  const labelRoom = (id) => Math.min(34, (labelHalf.get(id) || 0) * 0.55);
+
   // The same forces for the initial layout and the live physics: otherwise the graph would
   // “drift” to another equilibrium after opening
   function applyForceSet(simulation, links, count, cx, cy, radiusOf) {
     return simulation
-      .force("link", d3.forceLink(links).id((d) => d.id).distance(distanceOf(count)))
-      .force("charge", d3.forceManyBody().strength(chargeOf(count)).distanceMax(500))
+      .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => distanceOf(count) * linkSpread(l)))
+      .force("charge", d3.forceManyBody().strength(chargeOf(count)).distanceMax(600))
       .force("x", d3.forceX(cx).strength(0.03))
       .force("y", d3.forceY(cy).strength(0.03))
-      .force("collide", d3.forceCollide().radius((d) => radiusOf(d) + 6));
+      .force("collide", d3.forceCollide().radius((d) => radiusOf(d) + 6 + labelRoom(d.id)).strength(0.9).iterations(2));
   }
 
   // ---------------------------------------------------------------- layout (one for the whole space)
@@ -528,6 +542,7 @@
       .force("center", d3.forceCenter(cx, cy).strength(0.2))
       .on("tick", () => place())
       .on("end", () => {
+        restyle();                              // nodes moved — which labels overlap has changed
         savePositions();
         store.set(SETTLED_KEY, signature());   // physics has settled — that is the equilibrium
       });
@@ -545,7 +560,7 @@
     const base = options.mode === "all" ? all.nodes : shown.map((n) => nodeById.get(n.id));
     const ids = base.filter((n) => n && passesFilters(n)).map((n) => n.id).sort();
     for (const d of ids) h = (Math.imul(h, 31) + Math.floor(hash01(d) * 1e9)) | 0;
-    return `${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}`;
+    return `f2:${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}:${options.labelSize}`;
   }
   // animate — when filters change, nodes glide to their new places instead of jumping
   let tween = null;
@@ -828,7 +843,12 @@
   const neighbour = (a, b) => a === b || (adjacency.get(a) && adjacency.get(a).has(b));
 
   // The node has a label (visible at least dimmed)
+  let culled = new Set();
   function labelVisible(d) {
+    if (culled.has(d.id)) return false;
+    return wantsLabel(d);
+  }
+  function wantsLabel(d) {
     const f = hovered || selected;
     if (d.isCurrent || d.id === selected || matches(d)) return true;
     if (f && neighbour(f, d.id)) return true;
@@ -857,6 +877,29 @@
     if (cardHover) place();
   }
 
+  // Labels must not overlap: going from the most important (open, selected, hovered and its neighbours, search
+  // hits, then by link count), a label whose box overlaps an already placed one is hidden. Boxes are in graph
+  // coordinates with the current font size, so zooming in frees room and brings hidden labels back.
+  function cullLabels(fontSize) {
+    culled = new Set();
+    const f = hovered || selected;
+    const must = (d) => d.isCurrent || d.id === selected || d.id === hovered || matches(d);
+    const cands = shown.filter(wantsLabel);
+    if (cands.length > 600) return;
+    const prio = (d) => (must(d) ? 0 : f && neighbour(f, d.id) ? 1 : 2);
+    cands.sort((a, b) => prio(a) - prio(b) || (rankOf.get(a.id) || 0) - (rankOf.get(b.id) || 0));
+    const placed = [];
+    for (const d of cands) {
+      const size = must(d) ? fontSize * 1.15 : fontSize;
+      const w = Math.max(...d.lines.map((l) => l.length)) * size * 0.58;
+      const top = d.y + radius(d) + 2;
+      const box = { x0: d.x - w / 2, x1: d.x + w / 2, y0: top, y1: top + d.lines.length * size * 1.18 };
+      const hit = placed.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
+      if (hit && !must(d)) culled.add(d.id);
+      else placed.push(box);
+    }
+  }
+
   function restyle() {
     if (!nodeSel) return;
     updateBudget();
@@ -866,6 +909,7 @@
     const base = options.labelOpacity / 100;
     // when zoomed out, labels shrink less — so they stay readable
     const fontSize = 10.5 * options.labelSize / 100 * Math.min(1.6, Math.max(1, 0.85 / currentScale));
+    cullLabels(fontSize);
 
     nodeSel.select("circle.cn-alert")
       .attr("r", (d) => radius(d) + (d.id === hovered ? 2 : 0) + 3.5)
