@@ -34,6 +34,8 @@ work**. You can tick off tasks without leaving the graph.
   - motion: drift, calm, or still; repulsion, link length, pull to the center;
   - constellations: nebulae on/off, brightness, softness of the edges, color (own or by group), names, links ↔ text
     balance, strictness, size, smallest constellation, how strongly they gather, similarity threads;
+  - nodes as dots or as **stars** — a white-hot core, a glow of the group color and rays, bigger for pages with
+    more links (glow, rays and core are adjustable);
   - node size (by links or equal), link width and brightness, starry background, twinkling, dimming on hover;
   - labels: which to show, brightness, and size;
   - group colors, timeline brightness, marks, and opening on start.

@@ -185,6 +185,37 @@ async function main() {
     await toggleNebulae();
     await page.waitForTimeout(800);
     check("… and on again", await fr.evaluate(() => document.querySelectorAll(".cn-neb").length >= 1));
+    // stars: nodes as glowing stars with rays, the look switch and its settings
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-seg button")].find((b) => /^(Stars|Звёзды)$/.test(b.textContent)).click());
+    await page.waitForTimeout(800);
+    const star = await fr.evaluate(() => ({
+      rays: [...document.querySelectorAll("path.cn-rays")].filter((p) => p.style.display !== "none" && p.getAttribute("d")).length,
+      dots: document.querySelectorAll("circle.cn-dot").length,
+      fill: document.querySelector("circle.cn-dot").style.fill,
+      grads: document.querySelectorAll("radialGradient.cn-star-grad").length,
+      sliders: [...document.querySelectorAll(".cn-set-row")].filter((r) => /Star|звёзд/i.test(r.textContent)).length,
+    }));
+    check("stars: rays, glowing gradient, their settings", star.rays === star.dots && star.dots > 0 && /url\(/.test(star.fill)
+      && star.grads >= 1 && star.sliders >= 3, JSON.stringify(star));
+    if (shots) {
+      await page.evaluate(() => client.runCommandByName("Editor: Toggle Dark Mode"));
+      await page.waitForTimeout(1500);
+      fr = await graphFrame(page);
+      await page.screenshot({ path: join(shots, "stars-dark.png") });
+      await page.evaluate(() => client.runCommandByName("Editor: Toggle Dark Mode"));
+      await page.waitForTimeout(1200);
+      fr = await graphFrame(page);
+      await page.screenshot({ path: join(shots, "stars-light.png") });
+    }
+    await fr.evaluate(() => {
+      if (!document.querySelector("#cn-settings.open, .cn-settings.open")) {
+        document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click();
+      }
+    });
+    await page.waitForTimeout(500);
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-seg button")].find((b) => /^(Dots|Кружки)$/.test(b.textContent)).click());
+    await page.waitForTimeout(500);
+    check("… and back to dots", await fr.evaluate(() => [...document.querySelectorAll("path.cn-rays")].every((p) => p.style.display === "none")));
     await fr.evaluate(() => document.querySelector(".cn-set-actions [data-act=reset]").click());
     await page.waitForTimeout(800);
     await fr.evaluate(() => document.querySelector(".cn-icon[data-act=close]").click());

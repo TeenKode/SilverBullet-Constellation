@@ -55,11 +55,16 @@
     clusterSize: 50,          // size: few big constellations (0) … many small ones (100)
     clusterPull: 25,          // how strongly the pages of a constellation gather, 0–100
     simLinks: false,          // thin dashed threads between pages similar by text
+    // stars: nodes drawn as real stars — a white-hot core, a glow of the group color and diffraction rays
+    nodeStyle: "dots",        // dots — flat circles; stars — glowing stars
+    starGlow: 60,             // how far the glow spreads, %
+    starRays: 50,             // ray length, % (0 — no rays)
+    starCore: 60,             // how big and white the hot core is, %
   };
   const SETTING_KEYS = ["motion", "repel", "linkDistance", "nodeSize", "linkWidth", "labels", "labelOpacity", "labelSize",
     "colors", "freshBright", "marks", "gravity", "nodeSizeBy", "linkOpacity", "hoverFocus", "nearDepth", "starfield", "twinkle",
     "nebulae", "nebulaOpacity", "nebulaSoft", "nebulaColor", "nebulaLabels", "nebulaMin", "textWeight", "similarity",
-    "clusterSize", "clusterPull", "simLinks"];
+    "clusterSize", "clusterPull", "simLinks", "nodeStyle", "starGlow", "starRays", "starCore"];
 
   const LANG = window.__CN_LANG__ === "ru" ? "ru" : "en";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -89,6 +94,9 @@
       start: ["Open the graph when the space opens", "Show the full-screen graph instead of the start page when the space opens"],
       relayout: ["↻ Re-layout", "Lay out all nodes from scratch"], reset: ["Reset settings", "Restore the default settings"],
       gravity: "Pull to the center", nodeSizeBy: "Node size by",
+      nodeStyle: "Nodes look like", styleDots: ["Dots", "Flat colored circles"],
+      styleStars: ["Stars", "A white-hot core, a colored glow and rays"],
+      starGlow: "Star glow", starRays: "Star rays", starCore: "Star core",
       sizeLinks: ["Links", "The more links a page has, the bigger its node"], sizeSame: ["Equal", "All nodes are the same size"],
       linkOpacity: "Link brightness", hoverFocus: ["Dim the rest on hover", "The hovered node, its links and neighbours stay bright, everything else dims"],
       nearDepth: "“Nearby” — steps", starfield: ["Starry background", "Tiny stars behind the graph"],
@@ -132,6 +140,9 @@
       start: ["Открывать граф при запуске базы", "Показывать граф на весь экран вместо главной страницы при открытии базы"],
       relayout: ["↻ Разложить заново", "Разложить все узлы заново"], reset: ["Сбросить настройки", "Вернуть настройки по умолчанию"],
       gravity: "Притяжение к центру", nodeSizeBy: "Размер узла по",
+      nodeStyle: "Узлы — это", styleDots: ["Кружки", "Плоские цветные кружки"],
+      styleStars: ["Звёзды", "Раскалённое белое ядро, сияние цвета раздела и лучи"],
+      starGlow: "Сияние звёзд", starRays: "Лучи звёзд", starCore: "Ядро звёзд",
       sizeLinks: ["Связям", "Чем больше связей у страницы, тем крупнее узел"], sizeSame: ["Одинаковый", "Все узлы одного размера"],
       linkOpacity: "Яркость связей", hoverFocus: ["Приглушать остальное при наведении", "Наведённый узел, его связи и соседи яркие, остальное тускнеет"],
       nearDepth: "«Рядом» — шагов", starfield: ["Звёздный фон", "Мелкие звёзды за графом"],
@@ -586,7 +597,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   }
 
   // ---------------------------------------------------------------- drawing and physics
-  let svg, g, zoom, nodeSel, linkSel, pulse, sim = null, shown = [], shownLinks = [], currentScale = 1;
+  let svgDefs, svg, g, zoom, nodeSel, linkSel, pulse, sim = null, shown = [], shownLinks = [], currentScale = 1;
   let dragging = false;
 
   function size() {
@@ -658,6 +669,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   }
   cleanup.push(() => { if (rafId) cancelAnimationFrame(rafId); rafId = 0; });
 
+  let lastCull = 0;
   function buildSimulation() {
     if (sim) sim.stop();
     const count = shown.length;
@@ -672,7 +684,13 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     applyForceSet(sim, shownLinks, count, cx, cy, baseRadius)
       // the center of mass stays put: drifting and dragging do not move the whole graph
       .force("center", d3.forceCenter(cx, cy).strength(0.2))
-      .on("tick", () => place())
+      .on("tick", () => {
+        place();
+        // while nodes glide (constellations gather, settings change) labels are re-picked now and then —
+        // otherwise a label culled for the old place would hang over a neighbour until physics stops
+        const now = performance.now();
+        if (now - lastCull > 400) { lastCull = now; restyle(); }
+      })
       .on("end", () => {
         restyle();                              // nodes moved — which labels overlap has changed
         savePositions();
@@ -715,6 +733,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     for (const d of shown) { d.vx = 0; d.vy = 0; }
     if (!animate) {
       place();
+      restyle();                                // nodes moved — which labels overlap has changed
       savePositions();
       return;
     }
@@ -731,6 +750,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       place();
       if (t >= 1) {
         stopTween();
+        restyle();
         savePositions();
       }
     });
@@ -801,7 +821,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     svg.call(zoom).on("dblclick.zoom", null);
     svg.on("click", (event) => { if (event.target === svg.node()) closeCard(); });
     // nebulae: colored circles under the stars, blurred and “torn” by noise into a cloud
-    const defs = svg.append("defs");
+    const defs = (svgDefs = svg.append("defs"));
     const filter = defs.append("filter").attr("id", "cn-neb-filter").attr("x", "-40%").attr("y", "-40%")
       .attr("width", "180%").attr("height", "180%").attr("color-interpolation-filters", "sRGB");
     filter.append("feTurbulence").attr("type", "fractalNoise").attr("baseFrequency", 0.011).attr("numOctaves", 2)
@@ -878,6 +898,9 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .join(
         (en) => {
           const ng = en.append("g").attr("class", "cn-node");
+          ng.append("path").attr("class", "cn-rays")              // star rays — under the core
+            .style("--d", (d) => (2.6 + hash01(d.id + "*") * 3.4).toFixed(2) + "s")
+            .style("--dl", (d) => (-hash01(d.id + "~") * 6).toFixed(2) + "s");
           ng.append("circle").attr("class", "cn-dot");
           ng.append("circle").attr("class", "cn-alert");        // overdue ring — no fill, around the node
           ng.append("circle").attr("class", "cn-halo")           // twinkling glow (after the node: its circle stays the first)
@@ -1135,6 +1158,27 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   // Labels must not overlap: going from the most important (open, selected, hovered and its neighbours, search
   // hits, then by link count), a label whose box overlaps an already placed one is hidden. Boxes are in graph
   // coordinates with the current font size, so zooming in frees room and brings hidden labels back.
+  // Real width of a label line, measured by a hidden label in the same SVG (the same font as the labels):
+  // letters differ, Cyrillic is wider than the old 0.62 em guess
+  let measureText = null;
+  const textWidths = new Map();
+  function textWidth(line, size, bold) {
+    const key = `${bold ? 1 : 0}|${line}`;
+    let w = textWidths.get(key);
+    if (w === undefined) {
+      if (!measureText || !measureText.isConnected) {
+        measureText = svg.append("text").attr("class", "cn-label cn-measure").attr("x", -1e5).attr("y", -1e5)
+          .style("font-size", "100px").style("opacity", 0).style("pointer-events", "none").node();
+      }
+      measureText.style.fontWeight = bold ? "700" : "500";
+      measureText.textContent = line;
+      const px = measureText.getComputedTextLength();
+      w = px > 0 ? px / 100 : line.length * 0.62;
+      textWidths.set(key, w);
+    }
+    return w * size;
+  }
+
   function cullLabels(fontSize) {
     culled = new Set();
     const f = hovered || selected;
@@ -1144,14 +1188,15 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const prio = (d) => (must(d) ? 0 : f && neighbour(f, d.id) ? 1 : 2);
     cands.sort((a, b) => prio(a) - prio(b) || (rankOf.get(a.id) || 0) - (rankOf.get(b.id) || 0));
     // other nodes are obstacles too: a label drawn over someone else's circle is unreadable and hides the node
-    // margin: nodes drift ±3.5 px while floating, and a letter touching a circle already reads badly
-    const m = 5;
+    // margin: nodes drift ±3.5 px while floating — two neighbours drifting towards each other come 7 px closer —
+    // and a letter touching a circle already reads badly
+    const m = 8;
     const dots = shown.map((d) => ({ id: d.id, x0: d.x - radius(d) - m, x1: d.x + radius(d) + m,
       y0: d.y - radius(d) - m, y1: d.y + radius(d) + m }));
     const placed = [];
     for (const d of cands) {
       const size = must(d) ? fontSize * 1.15 : fontSize;
-      const w = Math.max(...d.lines.map((l) => l.length)) * size * 0.62;
+      const w = Math.max(...d.lines.map((l) => textWidth(l, size, must(d)))) + 2;
       const top = d.y + radius(d) + 2;
       const box = { x0: d.x - w / 2, x1: d.x + w / 2, y0: top, y1: top + d.lines.length * size * 1.18 };
       const over = (b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0;
@@ -1159,6 +1204,51 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       if (hit && !must(d)) culled.add(d.id);
       else placed.push(box);
     }
+  }
+
+  // ---- stars: one radial gradient per color (and look), rays — a thin four-pointed star shape
+  const starGlowScale = () => 1.7 + options.starGlow / 100 * 1.8;
+  // a star is sized like the dot (by links), and the difference is stronger: rays and glow grow faster
+  // than the radius, so a page with many links is a bright big star and a lonely one — a small one
+  const starSize = (r) => r * Math.min(1.6, Math.max(0.7, Math.pow(r / (7 * options.nodeSize / 100), 0.7)));
+  function starGradient(color) {
+    const k = starGlowScale();
+    const key = `cn-star-${String(color).replace(/[^\w]/g, "")}-${options.starGlow}-${options.starCore}-${isDark ? 1 : 0}`;
+    if (svgDefs && svgDefs.select("#" + key).empty()) {
+      const core = 1 / k;                                    // where the dot would end
+      const white = core * (0.2 + 0.6 * options.starCore / 100);
+      const grad = svgDefs.append("radialGradient").attr("id", key).attr("class", "cn-star-grad");
+      const stops = [
+        [0, isDark ? "#ffffff" : starRayColor(color), 1],
+        [white, isDark ? "#ffffff" : starRayColor(color), 1],
+        [core * 0.95, color, 1],
+        [core + (1 - core) * 0.25, color, isDark ? 0.35 : 0.3],
+        [core + (1 - core) * 0.6, color, isDark ? 0.1 : 0.08],
+        [1, color, 0],
+      ];
+      for (const [at, c, o] of stops) {
+        grad.append("stop").attr("offset", (Math.min(1, at) * 100).toFixed(1) + "%")
+          .attr("stop-color", c).attr("stop-opacity", o);
+      }
+    }
+    return key;
+  }
+  // a light tint of the group color — rays and (on a light theme) the core
+  function starRayColor(color) {
+    const c = d3.color(color);
+    if (!c) return color;
+    const w = isDark ? 0.55 : 0.2;
+    const rgb = c.rgb();
+    return d3.rgb(rgb.r + (255 - rgb.r) * w, rgb.g + (255 - rgb.g) * w, rgb.b + (255 - rgb.b) * w).formatHex();
+  }
+  function rayPath(r) {
+    const long = r * (1.6 + options.starRays / 100 * 4.2), short = long * 0.55, w = Math.max(0.5, r * 0.16);
+    const ray = (len, a) => {
+      const cs = Math.cos(a), sn = Math.sin(a), px = -sn * w, py = cs * w;
+      return `M${(cs * len).toFixed(2)},${(sn * len).toFixed(2)}L${px.toFixed(2)},${py.toFixed(2)}` +
+        `L${(-cs * len).toFixed(2)},${(-sn * len).toFixed(2)}L${(-px).toFixed(2)},${(-py).toFixed(2)}Z`;
+    };
+    return ray(long, 0) + ray(long, Math.PI / 2) + ray(short, Math.PI / 4) + ray(short, -Math.PI / 4);
   }
 
   function restyle() {
@@ -1186,16 +1276,28 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .style("font-size", fontSize * 0.92 + "px")
       .style("opacity", (d) => (search ? (matches(d) ? 1 : 0.2) : focus ? (focus.has(d.id) ? 1 : 0.2) : 1))
       .text((d) => (d.soon == null ? "" : soonText(d.soon)));
+    const stars = options.nodeStyle === "stars";
+    const glow = starGlowScale();
+    const dotOpacity = (d) => {
+      if (search) return matches(d) || d.isCurrent ? 1 : 0.18;
+      if (focus) return focus.has(d.id) ? 1 : 0.18;
+      return (d.isOrphan ? 0.5 : 1) * freshness(d);
+    };
+    const ringed = (d) => d.isCurrent || d.id === selected || matches(d) || (d.id === hovered && cardHover);
     nodeSel.select("circle.cn-dot")
-      .attr("r", (d) => radius(d) + (d.id === hovered ? 2 : 0))
-      .style("fill", (d) => colorOf(d))
-      .style("opacity", (d) => {
-        if (search) return matches(d) || d.isCurrent ? 1 : 0.18;
-        if (focus) return focus.has(d.id) ? 1 : 0.18;
-        return (d.isOrphan ? 0.5 : 1) * freshness(d);
-      })
-      .style("stroke", (d) => (d.isCurrent || d.id === selected || matches(d) || (d.id === hovered && cardHover) ? palette.ring : palette.bg))
-      .style("stroke-width", (d) => (d.isCurrent || d.id === selected || (d.id === hovered && cardHover) ? 3 : 1.5));
+      // a star is a bigger circle whose gradient fades out: the white core is as big as the dot would be
+      .attr("r", (d) => (stars ? starSize(radius(d)) * glow : radius(d)) + (d.id === hovered ? 2 : 0))
+      .style("fill", (d) => (stars ? `url(#${starGradient(colorOf(d))})` : colorOf(d)))
+      .style("opacity", dotOpacity)
+      .style("stroke", (d) => (ringed(d) ? palette.ring : stars ? "none" : palette.bg))
+      .style("stroke-width", (d) => (d.isCurrent || d.id === selected || (d.id === hovered && cardHover) ? 3 : 1.5) * (stars ? 0.6 : 1))
+      .style("stroke-opacity", stars ? 0.7 : null);
+    nodeSel.select("path.cn-rays")
+      .style("display", stars && options.starRays > 0 ? null : "none")
+      .attr("d", (d) => (stars ? rayPath(starSize(radius(d)) + (d.id === hovered ? 2 : 0)) : null))
+      .attr("transform", (d) => `rotate(${(hash01(d.id + "/") * 90 - 45).toFixed(1)})`)
+      .style("fill", (d) => starRayColor(colorOf(d)))
+      .style("opacity", (d) => dotOpacity(d) * 0.9);
     nodeSel.select("text.cn-label")
       .attr("y", (d) => radius(d) + (d.id === hovered ? 2 : 0) + 1)
       .style("font-size", (d) => (d.isCurrent || d.id === selected || d.id === hovered ? fontSize * 1.15 : fontSize) + "px")
@@ -1224,7 +1326,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     nodeSel.select("circle.cn-halo")
       .attr("r", (d) => radius(d) + 5)
       .style("fill", (d) => colorOf(d))
-      .style("display", twinkling ? null : "none");
+      .style("display", twinkling && !stars ? null : "none");
     styleNebulae();
     pulse.classed("on", !!(hovered && cardHover && shown.some((n) => n.id === hovered)))
       .style("stroke", hovered ? colorOf(nodeById.get(hovered) || { group: "other" }) : null);
@@ -1709,6 +1811,14 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     body.appendChild(sky);
 
     const look = section(T.look);
+    look.appendChild(segmented(T.nodeStyle, "nodeStyle", [
+      ["dots", ...T.styleDots], ["stars", ...T.styleStars],
+    ], () => { applyLook(); renderSettings(); }));
+    if (options.nodeStyle === "stars") {
+      look.appendChild(slider(T.starGlow, "starGlow", 0, 100, 5, " %", applyLook));
+      look.appendChild(slider(T.starRays, "starRays", 0, 100, 5, " %", applyLook));
+      look.appendChild(slider(T.starCore, "starCore", 0, 100, 5, " %", applyLook));
+    }
     look.appendChild(slider(T.nodeSize, "nodeSize", 50, 200, 5, " %", () => { applyLook(); applyForces(); }));
     look.appendChild(segmented(T.nodeSizeBy, "nodeSizeBy", [
       ["links", ...T.sizeLinks], ["same", ...T.sizeSame],
