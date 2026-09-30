@@ -227,6 +227,14 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const hub = Math.max(degree(endId(l.source)), degree(endId(l.target)));
     return Math.min(4.5, Math.max(0.75 + 0.3 * Math.sqrt(hub), hub * 90 / (2 * Math.PI) / 100));
   }
+  // A link to a hub is soft (d3 by default makes every leaf's only link rigid — a perfect ring): leaves are held
+  // by the hub loosely and settle by repulsion and by their other links. Each link also gets its own length
+  // (±35%, from the pair of ids — stable between runs), so the ring becomes a natural cloud.
+  function linkStrength(l) {
+    const a = degree(endId(l.source)), b = degree(endId(l.target));
+    return Math.min(1, 0.9 / Math.sqrt(Math.max(1, Math.max(a, b) / 3)));
+  }
+  const linkJitter = (l) => 0.65 + 0.7 * hash01(endId(l.source) + "→" + endId(l.target));
   // Room for the label: it hangs below the node, so the node needs space around it — half the label width,
   // not the whole of it (neighbouring labels are also moved apart by hiding overlaps, see cullLabels)
   const labelHalf = new Map(all.nodes.map((n) => [n.id,
@@ -237,7 +245,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   // “drift” to another equilibrium after opening
   function applyForceSet(simulation, links, count, cx, cy, radiusOf) {
     return simulation
-      .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => distanceOf(count) * linkSpread(l)))
+      .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => distanceOf(count) * linkSpread(l) * linkJitter(l))
+        .strength((l) => linkStrength(l)))
       .force("charge", d3.forceManyBody().strength(chargeOf(count)).distanceMax(600))
       .force("x", d3.forceX(cx).strength(0.03))
       .force("y", d3.forceY(cy).strength(0.03))
@@ -562,7 +571,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const base = options.mode === "all" ? all.nodes : shown.map((n) => nodeById.get(n.id));
     const ids = base.filter((n) => n && passesFilters(n)).map((n) => n.id).sort();
     for (const d of ids) h = (Math.imul(h, 31) + Math.floor(hash01(d) * 1e9)) | 0;
-    return `f3:${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}:${options.labelSize}`;
+    return `f4:${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}:${options.labelSize}`;
   }
   // animate — when filters change, nodes glide to their new places instead of jumping
   let tween = null;
@@ -1319,9 +1328,12 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const applyForces = () => {
     if (!sim) return;
     const count = shown.length;
-    sim.force("link").distance(distanceOf(count));
-    sim.force("charge").strength(chargeOf(count));
-    sim.force("collide").radius((d) => baseRadius(d) + 6);
+    // the same forces as in the layout (applyForceSet): otherwise the slider would move the graph
+    // to another equilibrium — without the length spread of links to hubs and the room for labels — and it would jump
+    let cx = 0, cy = 0;
+    for (const d of shown) { cx += d.x; cy += d.y; }
+    if (count) { cx /= count; cy /= count; }
+    applyForceSet(sim, shownLinks, count, cx, cy, baseRadius);
     if (options.motion === "still") {
       // a still graph: recompute the layout at once, without animation
       sim.alpha(0.3);
