@@ -51,6 +51,10 @@ export function demoSpace(folder, { language = "en", crlf = [] } = {}) {
     "Events/Club Meeting": `---\ndate: ${shift(20)}\n---\n# Club Meeting\n\nAgenda: [[Projects/Website]], [[Projects/Garden]].\n`,
     "Ideas/Stalls": "# Stalls\n\nFood, crafts, a book swap. Ask [[People/Carol]].\n",
     "Ideas/Blog": "# Blog\n\nWeekly posts from [[Journal/" + shift(-1) + "]].\n",
+    // three pages about one thing, not linked to each other: only the text puts them into one constellation
+    "Ideas/Compost": "# Compost\n\nGarden soil needs compost before planting seeds in spring. Beds, soil and seeds. [[People/Dan]]\n",
+    "Ideas/Seeds": "# Seeds\n\nWhich seeds for the garden beds this spring: planting plan, soil and compost. [[People/Dan]]\n",
+    "Ideas/Greenhouse": "# Greenhouse\n\nA greenhouse for seeds: garden soil, beds, planting in early spring, compost. [[People/Dan]]\n",
     "Ideas/Old idea": "# Old idea\n\nNot linked from anywhere.\n",
     "People/Ann": `# Ann\n\n\${query[[from t = index.tasks() where not t.done and t.who == "Ann" select templates.taskItem(t)]]}\n`,
     "People/Bob": "# Bob\n",

@@ -36,9 +36,30 @@
     period: 0,                // timeline: show pages from the last N days (0 — all time)
     freshBright: true,        // recent pages brighter, older ones fade
     marks: true,              // a ring on pages with overdue tasks, “in N days” on upcoming events
+    gravity: 30,              // pull of the nodes to the center, 0–100
+    nodeSizeBy: "links",      // links — bigger with more links; same — all nodes equal
+    linkOpacity: 100,         // link brightness at rest, %
+    hoverFocus: true,         // on hover the rest of the graph dims
+    nearDepth: 2,             // “Nearby”: how many steps from the selected page
+    starfield: true,          // a starry background
+    twinkle: true,            // stars twinkle
+    // constellations (nebulae): groups of pages about the same thing — by links and by the text of the pages
+    nebulae: true,            // show nebulae
+    nebulaOpacity: 30,        // nebula brightness, %
+    nebulaSoft: 50,           // softness and raggedness of the edges, %
+    nebulaColor: "cluster",   // cluster — every constellation has its color; group — the color of its main group
+    nebulaLabels: true,       // constellation names
+    nebulaMin: 3,             // the smallest constellation, pages
+    textWeight: 60,           // what matters more: links (0) or the text of the pages (100)
+    similarity: 40,           // strictness: the bigger, the less similar pages join one constellation
+    clusterSize: 50,          // size: few big constellations (0) … many small ones (100)
+    clusterPull: 25,          // how strongly the pages of a constellation gather, 0–100
+    simLinks: false,          // thin dashed threads between pages similar by text
   };
   const SETTING_KEYS = ["motion", "repel", "linkDistance", "nodeSize", "linkWidth", "labels", "labelOpacity", "labelSize",
-    "colors", "freshBright", "marks"];
+    "colors", "freshBright", "marks", "gravity", "nodeSizeBy", "linkOpacity", "hoverFocus", "nearDepth", "starfield", "twinkle",
+    "nebulae", "nebulaOpacity", "nebulaSoft", "nebulaColor", "nebulaLabels", "nebulaMin", "textWeight", "similarity",
+    "clusterSize", "clusterPull", "simLinks"];
 
   const LANG = window.__CN_LANG__ === "ru" ? "ru" : "en";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -67,6 +88,24 @@
       marks: ["Marks: overdue tasks and upcoming events", "A red ring on pages with overdue tasks, “in N days” on upcoming events"],
       start: ["Open the graph when the space opens", "Show the full-screen graph instead of the start page when the space opens"],
       relayout: ["↻ Re-layout", "Lay out all nodes from scratch"], reset: ["Reset settings", "Restore the default settings"],
+      gravity: "Pull to the center", nodeSizeBy: "Node size by",
+      sizeLinks: ["Links", "The more links a page has, the bigger its node"], sizeSame: ["Equal", "All nodes are the same size"],
+      linkOpacity: "Link brightness", hoverFocus: ["Dim the rest on hover", "The hovered node, its links and neighbours stay bright, everything else dims"],
+      nearDepth: "“Nearby” — steps", starfield: ["Starry background", "Tiny stars behind the graph"],
+      twinkle: ["Twinkling stars", "Nodes softly twinkle (off on big graphs)"],
+      constellations: "Constellations",
+      nebulae: ["Nebulae", "Groups of pages about the same thing glow like nebulae, with a name"],
+      nebulaOpacity: "Nebula brightness", nebulaSoft: "Softness of the edges",
+      nebulaColor: "Nebula color", colorCluster: ["Own", "Every constellation has its own color"],
+      colorGroup: ["By group", "The color of the group most pages of the constellation belong to"],
+      nebulaLabels: ["Constellation names", "A name over every nebula (the most connected page of it)"],
+      nebulaMin: "Smallest constellation", textWeight: "Links ↔ text",
+      textWeightHint: "0 — only links between pages, 100 — only similarity of the texts",
+      similarity: "Strictness", similarityHint: "The bigger, the less similar pages join one constellation",
+      clusterSize: "Constellation size", clusterSizeHint: "Left — few big ones, right — many small ones",
+      clusterPull: "Gathering", clusterPullHint: "How strongly the pages of one constellation pull together",
+      simLinks: ["Similarity threads", "Thin dashed lines between pages similar by text, even without a link"],
+      pages: (n) => `${n} pages`, nebulaCount: (n) => `Constellations: ${n}`, nebulaWait: "Counting similarity of texts…",
     },
     ru: {
       title: "Граф связей", all: ["Вся база", "Показать все страницы и связи"], near: ["Рядом", "Только страницы в двух шагах от выбранной"],
@@ -92,6 +131,24 @@
       marks: ["Отметки: просроченные задачи и ближайшие мероприятия", "Красное кольцо у страниц с просроченными задачами, «через N дн.» у ближайших мероприятий"],
       start: ["Открывать граф при запуске базы", "Показывать граф на весь экран вместо главной страницы при открытии базы"],
       relayout: ["↻ Разложить заново", "Разложить все узлы заново"], reset: ["Сбросить настройки", "Вернуть настройки по умолчанию"],
+      gravity: "Притяжение к центру", nodeSizeBy: "Размер узла по",
+      sizeLinks: ["Связям", "Чем больше связей у страницы, тем крупнее узел"], sizeSame: ["Одинаковый", "Все узлы одного размера"],
+      linkOpacity: "Яркость связей", hoverFocus: ["Приглушать остальное при наведении", "Наведённый узел, его связи и соседи яркие, остальное тускнеет"],
+      nearDepth: "«Рядом» — шагов", starfield: ["Звёздный фон", "Мелкие звёзды за графом"],
+      twinkle: ["Мерцание звёзд", "Узлы мягко мерцают (на больших графах отключается)"],
+      constellations: "Созвездия",
+      nebulae: ["Туманности", "Группы страниц об одном и том же светятся туманностями, с названием"],
+      nebulaOpacity: "Яркость туманностей", nebulaSoft: "Мягкость краёв",
+      nebulaColor: "Цвет туманностей", colorCluster: ["Свой", "У каждого созвездия свой цвет"],
+      colorGroup: ["По разделу", "Цвет раздела, к которому относится больше всего страниц созвездия"],
+      nebulaLabels: ["Названия созвездий", "Название над туманностью (самая связанная её страница)"],
+      nebulaMin: "Наименьшее созвездие", textWeight: "Связи ↔ текст",
+      textWeightHint: "0 — только ссылки между страницами, 100 — только схожесть текстов",
+      similarity: "Строгость", similarityHint: "Чем выше, тем меньше похожих страниц попадает в одно созвездие",
+      clusterSize: "Размер созвездий", clusterSizeHint: "Влево — мало крупных, вправо — много мелких",
+      clusterPull: "Стягивание", clusterPullHint: "Как сильно страницы одного созвездия тянутся друг к другу",
+      simLinks: ["Нити схожести", "Тонкие пунктирные линии между страницами, похожими по тексту, даже без ссылки"],
+      pages: (n) => `${n} стр.`, nebulaCount: (n) => `Созвездий: ${n}`, nebulaWait: "Считаю схожесть текстов…",
     },
   };
   const T = I18N[LANG];
@@ -206,8 +263,71 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     .sort((a, b) => degree(b.id) - degree(a.id) || (a.id < b.id ? -1 : 1))
     .map((n, i) => [n.id, i]));
 
+  // ---------------------------------------------------------------- constellations
+  // Text similarity of pages arrives from the plug a little after the graph is shown (see loadSimilarity);
+  // until then — links only. Day and week summaries are not clustered: they link everything with everything.
+  let simData = [];                  // [[a, b, similarity]]
+  let simLoaded = false;
+  let clusterOf = new Map();         // page → constellation id
+  let clusters = [];                 // [{id, members, name, size}]
+  let clusterById = new Map();
+  let hoverCluster = null;
+  function recluster() {
+    clusterOf = new Map(); clusters = []; clusterById = new Map();
+    if (!options.nebulae || !window.CNCluster) return;
+    const skip = new Set(all.nodes.filter((n) => n.periodic).map((n) => n.id));
+    const r = window.CNCluster.detect({
+      ids: all.nodes.map((n) => n.id), links: all.edges.map((e) => [e.source, e.target]), sims: simData, skip,
+      textWeight: options.textWeight / 100, similarity: options.similarity / 100,
+      resolution: 0.3 + 1.7 * options.clusterSize / 100, minSize: options.nebulaMin,
+      label: (id) => (nodeById.get(id) || { label: id }).label, rank: (id) => degree(id),
+    });
+    clusterOf = r.of; clusters = r.clusters;
+    for (const c of clusters) clusterById.set(c.id, c);
+    // hues go round the color wheel by the golden angle: neighbours by name never get almost the same color
+    clusterHue = new Map(clusters.map((c) => c.id).sort().map((id, i) => [id, Math.round((i * 137.508 + 25) % 360)]));
+  }
+  let clusterHue = new Map();
+  function clusterColor(c, forText) {
+    if (options.nebulaColor === "group") {
+      const votes = {};
+      for (const id of c.members) { const n = nodeById.get(id); if (n) votes[n.group] = (votes[n.group] || 0) + 1; }
+      const top = Object.keys(votes).sort((a, b) => votes[b] - votes[a] || (a < b ? -1 : 1))[0];
+      return groupColor[top] || groupColor.other;
+    }
+    const hue = clusterHue.has(c.id) ? clusterHue.get(c.id) : Math.floor(hash01(c.id + "*") * 360);
+    // names on a light background are darker, otherwise they melt into the cloud
+    return isDark ? `hsl(${hue} 72% 64%)` : forText ? `hsl(${hue} 62% 36%)` : `hsl(${hue} 68% 52%)`;
+  }
+  // A gentle pull of every constellation's pages to its center: the constellations gather, the sky between them stays dark
+  function clusterForce() {
+    let nodes = [];
+    const force = (alpha) => {
+      const k = options.nebulae ? options.clusterPull / 100 : 0;
+      if (!k || !clusterOf.size) return;
+      const sum = new Map();
+      for (const n of nodes) {
+        const c = clusterOf.get(n.id);
+        if (c === undefined) continue;
+        let a = sum.get(c);
+        if (!a) sum.set(c, (a = { x: 0, y: 0, n: 0 }));
+        a.x += n.x; a.y += n.y; a.n++;
+      }
+      for (const n of nodes) {
+        const a = sum.get(clusterOf.get(n.id));
+        if (!a || a.n < 2) continue;
+        n.vx += (a.x / a.n - n.x) * k * 0.25 * alpha;
+        n.vy += (a.y / a.n - n.y) * k * 0.25 * alpha;
+      }
+    };
+    force.initialize = (ns) => { nodes = ns; };
+    return force;
+  }
+  recluster();
+  window.__CN_CLUSTERS__ = () => clusters.map((c) => ({ id: c.id, name: c.name, members: c.members.slice() }));   // for the checks
+
   // Radius — by links in the whole space, not in the visible part: filters do not resize nodes
-  const baseRadius = (n) => Math.min(14, 4 + Math.sqrt(degree(n.id)) * 1.8) * options.nodeSize / 100;
+  const baseRadius = (n) => (options.nodeSizeBy === "same" ? 6.5 : Math.min(14, 4 + Math.sqrt(degree(n.id)) * 1.8)) * options.nodeSize / 100;
   const radius = (d) => baseRadius(d) + (d.isCurrent || d.id === selected ? 3 : 0);
 
   // Forces get weaker as the graph grows, so a big graph does not fly apart
@@ -248,8 +368,9 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => distanceOf(count) * linkSpread(l) * linkJitter(l))
         .strength((l) => linkStrength(l)))
       .force("charge", d3.forceManyBody().strength(chargeOf(count)).distanceMax(600))
-      .force("x", d3.forceX(cx).strength(0.03))
-      .force("y", d3.forceY(cy).strength(0.03))
+      .force("x", d3.forceX(cx).strength(options.gravity / 1000))
+      .force("y", d3.forceY(cy).strength(options.gravity / 1000))
+      .force("cluster", clusterForce())
       .force("collide", d3.forceCollide().radius((d) => radiusOf(d) + 6 + labelRoom(d.id)).strength(0.9).iterations(2));
   }
 
@@ -454,7 +575,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     if (options.mode === "near" && focus && ids.has(focus)) {
       const keep = new Set([focus]);
       let frontier = [focus];
-      for (let step = 0; step < 2; step++) {
+      for (let step = 0; step < options.nearDepth; step++) {
         const next = [];
         for (const id of frontier) for (const nb of adjacency.get(id) || []) if (ids.has(nb) && !keep.has(nb)) { keep.add(nb); next.push(nb); }
         frontier = next;
@@ -528,7 +649,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     if (now - lastFrame > 33) {          // ~30 frames per second is enough
       lastFrame = now;
       floatT = now / 1000;
-      if (!dragging) place();
+      if (!dragging) place(true);
     }
     rafId = requestAnimationFrame(floatLoop);
   }
@@ -571,7 +692,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const base = options.mode === "all" ? all.nodes : shown.map((n) => nodeById.get(n.id));
     const ids = base.filter((n) => n && passesFilters(n)).map((n) => n.id).sort();
     for (const d of ids) h = (Math.imul(h, 31) + Math.floor(hash01(d) * 1e9)) | 0;
-    return `f4:${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}:${options.labelSize}`;
+    return `f5:${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}:${options.labelSize}:${options.gravity}:${options.nodeSizeBy}`;
   }
   // animate — when filters change, nodes glide to their new places instead of jumping
   let tween = null;
@@ -662,7 +783,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return lines.length ? lines : [text];
   }
 
-  let linkLayer, nodeLayer;
+  let linkLayer, nodeLayer, nebLayer, nebTextLayer, simLayer, nebSel = null, nebLabelSel = null, simSel = null, shownSims = [];
   function ensureSvg() {
     if (svg) return false;
     container.innerHTML = "";
@@ -679,7 +800,19 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .on("end", () => saveView());
     svg.call(zoom).on("dblclick.zoom", null);
     svg.on("click", (event) => { if (event.target === svg.node()) closeCard(); });
+    // nebulae: colored circles under the stars, blurred and “torn” by noise into a cloud
+    const defs = svg.append("defs");
+    const filter = defs.append("filter").attr("id", "cn-neb-filter").attr("x", "-40%").attr("y", "-40%")
+      .attr("width", "180%").attr("height", "180%").attr("color-interpolation-filters", "sRGB");
+    filter.append("feTurbulence").attr("type", "fractalNoise").attr("baseFrequency", 0.011).attr("numOctaves", 2)
+      .attr("seed", 7).attr("result", "noise");
+    filter.append("feDisplacementMap").attr("class", "cn-neb-disp").attr("in", "SourceGraphic").attr("in2", "noise")
+      .attr("scale", 40).attr("result", "torn");
+    filter.append("feGaussianBlur").attr("class", "cn-neb-blur").attr("in", "torn").attr("stdDeviation", 20);
+    nebLayer = g.append("g").attr("class", "cn-nebulae").attr("filter", "url(#cn-neb-filter)");
+    simLayer = g.append("g").attr("class", "cn-sims");
     linkLayer = g.append("g").attr("class", "cn-links");
+    nebTextLayer = g.append("g").attr("class", "cn-neb-labels");
     pulse = g.append("circle").attr("class", "cn-pulse").attr("r", 10);
     nodeLayer = g.append("g").attr("class", "cn-nodes");
     return true;
@@ -747,6 +880,9 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
           const ng = en.append("g").attr("class", "cn-node");
           ng.append("circle").attr("class", "cn-dot");
           ng.append("circle").attr("class", "cn-alert");        // overdue ring — no fill, around the node
+          ng.append("circle").attr("class", "cn-halo")           // twinkling glow (after the node: its circle stays the first)
+            .style("--d", (d) => (2.6 + hash01(d.id + "^") * 3.4).toFixed(2) + "s")
+            .style("--dl", (d) => (-hash01(d.id + "!") * 6).toFixed(2) + "s");
           ng.append("title").text((d) => d.id);
           const text = ng.append("text").attr("class", "cn-label")
             .attr("text-anchor", "middle")
@@ -761,6 +897,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         (ex) => ex.call(leave))
       .order();
     place();
+    drawNebulae();
+    drawSims();
 
     nodeSel.call(d3.drag()
       .on("start", (event, d) => {
@@ -831,8 +969,114 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   // A node is drawn with the drift offset (the dragged one — without it)
   const px = (d) => d.x + (d.fx != null ? 0 : offX(d));
   const py = (d) => d.y + (d.fy != null ? 0 : offY(d));
-  function place() {
+  // ---------------------------------------------------------------- nebulae, names and threads of similarity
+  const nebRadius = () => 30 + options.linkDistance * 0.7;
+  function drawNebulae() {
+    if (!nebLayer) return;
+    const byId = new Map(shown.map((d) => [d.id, d]));
+    const data = options.nebulae
+      ? clusters.map((c) => ({ c, members: c.members.map((id) => byId.get(id)).filter(Boolean) }))
+        .filter((x) => x.members.length >= options.nebulaMin)
+      : [];
+    nebSel = nebLayer.selectAll("g.cn-neb").data(data, (x) => x.c.id)
+      .join((en) => en.append("g").attr("class", "cn-neb"), (up) => up, (ex) => ex.remove());
+    nebSel.each(function (x) {
+      d3.select(this).selectAll("circle").data(x.members, (d) => d.id)
+        .join((en) => en.append("circle"), (up) => up, (ex) => ex.remove());
+    });
+    nebLabelSel = nebTextLayer.selectAll("text.cn-neb-label").data(options.nebulaLabels ? data : [], (x) => x.c.id)
+      .join((en) => en.append("text").attr("class", "cn-neb-label").attr("text-anchor", "middle"), (up) => up, (ex) => ex.remove());
+    nebLabelSel
+      .text((x) => truncate(x.c.name, 26))
+      .on("pointerenter", (e, x) => { hoverCluster = x.c.id; restyle(); })
+      .on("pointerleave", () => { hoverCluster = null; restyle(); })
+      // a click on the name brings the constellation closer
+      .on("click", (event, x) => { event.stopPropagation(); fit(500, false, undefined, x.members); });
+    styleNebulae();
+    placeNebulae();
+  }
+  function styleNebulae() {
+    if (!nebLayer) return;
+    const soft = options.nebulaSoft;
+    // no ragged edges on big graphs: the noise filter is heavy
+    svg.select(".cn-neb-disp").attr("scale", shown.length > 600 ? 0 : 8 + soft * 0.9);
+    svg.select(".cn-neb-blur").attr("stdDeviation", 4 + soft * 0.4);
+    const r = nebRadius();
+    nebLayer.selectAll("g.cn-neb").style("fill", (x) => clusterColor(x.c))
+      .style("fill-opacity", options.nebulaOpacity / 100 * 0.5)
+      .style("opacity", (x) => (hoverCluster ? (hoverCluster === x.c.id ? 1 : 0.2) : 1))
+      .selectAll("circle").attr("r", r);
+    if (nebLabelSel) {
+      nebLabelSel.style("fill", (x) => clusterColor(x.c, true))
+        .style("font-size", (x) => Math.min(40, 15 + Math.sqrt(x.members.length) * 4) + "px")
+        .style("opacity", (x) => (hoverCluster ? (hoverCluster === x.c.id ? 0.95 : 0.15) : 0.55 * Math.min(1, 0.4 + options.nebulaOpacity / 60)));
+    }
+  }
+  function placeNebulae() {
+    if (nebSel) {
+      nebSel.selectAll("circle").attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+    }
+    if (nebLabelSel) {
+      nebLabelSel.attr("x", (x) => x.members.reduce((s, d) => s + d.x, 0) / x.members.length)
+        .attr("y", (x) => x.members.reduce((s, d) => s + d.y, 0) / x.members.length);
+    }
+  }
+  function drawSims() {
+    if (!simLayer) return;
+    const byId = new Map(shown.map((d) => [d.id, d]));
+    const floor = 0.2 + 0.4 * options.similarity / 100;
+    shownSims = options.nebulae && options.simLinks
+      ? simData.filter(([a, b, w]) => w >= floor && byId.has(a) && byId.has(b) && !neighbour(a, b))
+        .sort((p, q) => q[2] - p[2]).slice(0, 400)
+        .map(([a, b, w]) => ({ id: a + "\u0000" + b, source: byId.get(a), target: byId.get(b), w }))
+      : [];
+    simSel = simLayer.selectAll("line").data(shownSims, (l) => l.id)
+      .join((en) => en.append("line"), (up) => up, (ex) => ex.remove());
+    simSel.style("stroke-opacity", (l) => 0.18 + 0.5 * Math.min(1, l.w))
+      .attr("x1", (d) => px(d.source)).attr("y1", (d) => py(d.source)).attr("x2", (d) => px(d.target)).attr("y2", (d) => py(d.target));
+  }
+  // Constellations changed (settings, or the similarity of texts arrived): count again and show.
+  // physics — only if the composition really changed or the person moves a slider: on a normal open the graph does not move
+  const CLUSTER_KEY = spaceKey("constellation.clusters.v1");
+  function applyClusters(physics) {
+    recluster();
+    drawNebulae();
+    drawSims();
+    const sig = options.nebulae ? clusters.map((c) => c.id + ":" + c.size).join("|") + ":" + options.clusterPull : "off";
+    const changed = store.get(CLUSTER_KEY, "") !== sig;
+    store.set(CLUSTER_KEY, sig);
+    if (physics || changed) applyForces();
+    restyle();
+    updateClusterInfo();
+  }
+  let clusterTimer = null;
+  const applyClustersSoon = () => {           // sliders: recount at most every 80 ms
+    clearTimeout(clusterTimer);
+    clusterTimer = setTimeout(() => applyClusters(true), 80);
+  };
+  cleanup.push(() => clearTimeout(clusterTimer));
+  function loadSimilarity() {
+    if (simLoaded || !window.__CN_SIMILARITY__ || !options.nebulae || options.textWeight === 0) return;
+    simLoaded = true;
+    updateClusterInfo();
+    call("similarity").then((pairs) => {
+      simData = (Array.isArray(pairs) ? pairs : []).map((p) => [p.a, p.b, p.w]);
+      simReady = true;
+      applyClusters(false);
+    }).catch(() => { simLoaded = false; });
+  }
+  let simReady = false;
+  function updateClusterInfo() {
+    const el = settingsPanel && settingsPanel.querySelector(".cn-cluster-info");
+    if (!el) return;
+    el.textContent = simLoaded && !simReady ? T.nebulaWait : T.nebulaCount(clusters.length);
+  }
+
+  function place(fromFloat) {
     if (!linkSel) return;
+    // nebulae and constellation names ignore the ±3.5 px drift: they are soft anyway, and re-blurring 30 times a second is costly
+    if (!fromFloat) placeNebulae();
+    if (simSel) simSel.attr("x1", (d) => px(d.source)).attr("y1", (d) => py(d.source)).attr("x2", (d) => px(d.target)).attr("y2", (d) => py(d.target));
     linkSel.attr("x1", (d) => px(d.source)).attr("y1", (d) => py(d.source))
       .attr("x2", (d) => px(d.target)).attr("y2", (d) => py(d.target));
     nodeSel.attr("transform", (d) => `translate(${px(d)},${py(d)})`);
@@ -920,8 +1164,9 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   function restyle() {
     if (!nodeSel) return;
     updateBudget();
-    const f = hovered || selected;
-    const focus = f ? new Set([f, ...(adjacency.get(f) || [])]) : null;
+    const f = (options.hoverFocus ? hovered : null) || selected;
+    const cl = !f && hoverCluster ? clusterById.get(hoverCluster) : null;
+    const focus = f ? new Set([f, ...(adjacency.get(f) || [])]) : cl ? new Set(cl.members) : null;
     const touches = (l) => f && (l.source.id === f || l.target.id === f);
     const base = options.labelOpacity / 100;
     // when zoomed out, labels shrink less — so they stay readable
@@ -967,7 +1212,20 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     linkSel
       .style("stroke", (l) => (touches(l) ? palette.edgeHi : palette.edge))
       .style("stroke-width", (l) => (touches(l) ? 2.2 : 1.2) * options.linkWidth / 100)
-      .style("opacity", (l) => ((focus && !touches(l)) || search ? 0.12 : touches(l) ? 0.95 : 0.6));
+      .style("opacity", (l) => {
+        if (search) return 0.12;
+        if (touches(l)) return 0.95;
+        if (cl) return focus.has(l.source.id) && focus.has(l.target.id) ? 0.8 : 0.12;
+        return focus ? 0.12 : 0.6 * options.linkOpacity / 100;
+      });
+    // twinkling glow of the stars: only where it is not heavy
+    const twinkling = options.twinkle && options.motion !== "still" && shown.length <= 300;
+    svg.classed("cn-twinkle", twinkling);
+    nodeSel.select("circle.cn-halo")
+      .attr("r", (d) => radius(d) + 5)
+      .style("fill", (d) => colorOf(d))
+      .style("display", twinkling ? null : "none");
+    styleNebulae();
     pulse.classed("on", !!(hovered && cardHover && shown.some((n) => n.id === hovered)))
       .style("stroke", hovered ? colorOf(nodeById.get(hovered) || { group: "other" }) : null);
   }
@@ -1006,9 +1264,9 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return { x0, y0: 0, x1, y1 };
   }
 
-  function fit(duration, save, from) {
+  function fit(duration, save, from, nodes) {
     if (!shown.length) return;
-    const b = bounds(shown);
+    const b = bounds(nodes && nodes.length ? nodes : shown);
     const a = freeArea();
     const w = a.x1 - a.x0, h = a.y1 - a.y0, pad = 20;
     const k = Math.max(0.1, Math.min(1.4, Math.min((w - 2 * pad) / (b.maxX - b.minX || 1), (h - 2 * pad) / (b.maxY - b.minY || 1))));
@@ -1342,7 +1600,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       savePositions();
     } else startMotion(0.35);
   };
-  const applyLook = () => restyle();
+  const applyLook = () => {
+    container.classList.toggle("cn-starfield", !!options.starfield);
+    restyle();
+  };
+  const styleNebulaeNow = () => styleNebulae();
   const applyMotion = () => {
     if (options.motion === "still") {
       if (sim) sim.stop();
@@ -1368,9 +1630,10 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return row;
   }
 
-  function slider(label, key, min, max, step, unit, apply) {
+  function slider(label, key, min, max, step, unit, apply, hint) {
     const row = document.createElement("div");
     row.className = "cn-set-row";
+    if (hint) row.title = hint;
     row.innerHTML = `<div class="cn-set-label">${label}<span class="cn-set-value"></span></div>
       <input type="range" min="${min}" max="${max}" step="${step}" value="${options[key]}">`;
     const input = row.querySelector("input");
@@ -1416,11 +1679,45 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     ], applyMotion));
     motion.appendChild(slider(T.repel, "repel", 0, 100, 1, "", applyForces));
     motion.appendChild(slider(T.linkDistance, "linkDistance", 20, 200, 5, " px", applyForces));
+    motion.appendChild(slider(T.gravity, "gravity", 0, 100, 5, "", applyForces));
     body.appendChild(motion);
+
+    const sky = section(T.constellations);
+    sky.appendChild(checkbox(T.nebulae[0], "nebulae", T.nebulae[1], () => {
+      if (options.nebulae) loadSimilarity();
+      applyClusters(true);
+      renderSettings();
+    }));
+    if (options.nebulae) {
+      const info = document.createElement("div");
+      info.className = "cn-cluster-info cn-hint";
+      sky.appendChild(info);
+      sky.appendChild(slider(T.nebulaOpacity, "nebulaOpacity", 5, 100, 5, " %", styleNebulaeNow));
+      sky.appendChild(slider(T.nebulaSoft, "nebulaSoft", 0, 100, 5, " %", styleNebulaeNow));
+      sky.appendChild(segmented(T.nebulaColor, "nebulaColor", [
+        ["cluster", ...T.colorCluster], ["group", ...T.colorGroup],
+      ], styleNebulaeNow));
+      sky.appendChild(checkbox(T.nebulaLabels[0], "nebulaLabels", T.nebulaLabels[1], drawNebulae));
+      sky.appendChild(slider(T.textWeight, "textWeight", 0, 100, 5, " %", () => { loadSimilarity(); applyClustersSoon(); }, T.textWeightHint));
+      sky.appendChild(slider(T.similarity, "similarity", 0, 100, 5, " %", applyClustersSoon, T.similarityHint));
+      sky.appendChild(slider(T.clusterSize, "clusterSize", 0, 100, 5, " %", applyClustersSoon, T.clusterSizeHint));
+      sky.appendChild(slider(T.nebulaMin, "nebulaMin", 2, 10, 1, "", applyClustersSoon));
+      sky.appendChild(slider(T.clusterPull, "clusterPull", 0, 100, 5, " %", applyForces, T.clusterPullHint));
+      sky.appendChild(checkbox(T.simLinks[0], "simLinks", T.simLinks[1], drawSims));
+      updateClusterInfo();
+    }
+    body.appendChild(sky);
 
     const look = section(T.look);
     look.appendChild(slider(T.nodeSize, "nodeSize", 50, 200, 5, " %", () => { applyLook(); applyForces(); }));
+    look.appendChild(segmented(T.nodeSizeBy, "nodeSizeBy", [
+      ["links", ...T.sizeLinks], ["same", ...T.sizeSame],
+    ], () => { applyLook(); applyForces(); }));
     look.appendChild(slider(T.linkWidth, "linkWidth", 50, 300, 10, " %", applyLook));
+    look.appendChild(slider(T.linkOpacity, "linkOpacity", 10, 100, 5, " %", applyLook));
+    look.appendChild(checkbox(T.starfield[0], "starfield", T.starfield[1], applyLook));
+    look.appendChild(checkbox(T.twinkle[0], "twinkle", T.twinkle[1], () => restyle()));
+    look.appendChild(checkbox(T.hoverFocus[0], "hoverFocus", T.hoverFocus[1], () => restyle()));
     body.appendChild(look);
 
     const labels = section(T.labels);
@@ -1453,6 +1750,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const other = section(T.other);
     other.appendChild(checkbox(T.fresh[0], "freshBright", T.fresh[1], () => restyle()));
     other.appendChild(checkbox(T.marks[0], "marks", T.marks[1], () => restyle()));
+    other.appendChild(segmented(T.nearDepth, "nearDepth", [[1, "1", ""], [2, "2", ""], [3, "3", ""]], () => refresh(true)));
     other.appendChild(checkbox(T.start[0], "startWithGraph", T.start[1]));
     const actions = document.createElement("div");
     actions.className = "cn-set-actions";
@@ -1472,9 +1770,9 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       }
       updateColors();
       drawLegend();
-      applyForces();
+      applyClusters(true);
       applyMotion();
-      restyle();
+      applyLook();
       renderSettings();
     });
     other.appendChild(actions);
@@ -1511,6 +1809,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return str.length <= max ? str : str.slice(0, max - 1) + "…";
   }
 
+  container.classList.toggle("cn-starfield", !!options.starfield);
   draw(false);
+  loadSimilarity();
   if (VIEW === "full" && window.__CN_SELECT__ && nodeById.has(window.__CN_SELECT__)) openCard(window.__CN_SELECT__);
 })();

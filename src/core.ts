@@ -25,6 +25,8 @@ export interface Config {
   startPage: string;
   homeLabel: string;
   extraCss: string;                       // extra CSS for the panel, e.g. styles of your widgets shown in the card
+  similarity: boolean;                    // read page texts to find pages about the same thing (nebulae); false — links only
+  similarityMaxPages: number;             // more pages than this — texts are not read
 }
 
 export const DEFAULT_EXCLUDE = ["Library/", "Repositories/", "_", "PLUGS", "SETTINGS", "CONFIG", "SECRETS"];
@@ -48,6 +50,8 @@ export function normalizeConfig(raw: unknown): Config {
     startPage: typeof c.startPage === "string" ? c.startPage : "index",
     homeLabel: typeof c.homeLabel === "string" ? c.homeLabel : "",
     extraCss: typeof c.extraCss === "string" ? c.extraCss : "",
+    similarity: c.similarity !== false,
+    similarityMaxPages: Number(c.similarityMaxPages) > 0 ? Number(c.similarityMaxPages) : 1500,
   };
 }
 
@@ -308,11 +312,14 @@ export function nodeDate(name: string, lastModified: unknown, undated = false): 
   const d = s.match(/^\d{4}-\d{2}-\d{2}/) ? new Date(s) : typeof lastModified === "number" ? new Date(lastModified) : null;
   return d && !isNaN(d.getTime()) ? isoDate(d) : "";
 }
+// A day (2026-09-28) or a week (2026-W39) page
+export const isPeriodic = (name: string) => /^\d{4}-(\d{2}-\d{2}|W\d{2})$/.test(name.slice(name.lastIndexOf("/") + 1));
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b + "T12:00:00") - Date.parse(a + "T12:00:00")) / 86400000);
 
 export type GraphNode = {
   id: string; group: string; label: string; isCurrent: boolean; isOrphan: boolean;
   date: string; overdue: number; soon: number | null; soonVia: string;
+  periodic: boolean;             // a day or a week summary: not clustered, not compared by text
 };
 
 export type IndexObjects = { links: any[]; pages: any[]; tasks: any[] };
@@ -334,6 +341,7 @@ export function buildGraphData(currentPage: string, objects: IndexObjects, cfg: 
       nodes.set(id, {
         id, group: groupOf(id, cfg.groups), label: labelOf(id, lang, cfg), isCurrent: id === currentPage, isOrphan: false,
         date: extra?.date ?? "", overdue: overdue.get(id) ?? 0, soon: extra?.soon ?? null, soonVia: extra?.soonVia ?? "",
+        periodic: isPeriodic(id),
       });
     }
   };

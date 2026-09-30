@@ -9,8 +9,9 @@
 // without configuration pages are grouped by their top-level folder.
 import { asset, clientStore, editor, space } from "@silverbulletmd/silverbullet/syscalls";
 import { syscall } from "@silverbulletmd/silverbullet/syscall";
+import { type Pair, similarPairs } from "./similarity.ts";
 import {
-  buildGraphData, type Config, findDirectives, type Lang, normalizeConfig, type ResolvedGroup, resolveLang,
+  buildGraphData, type Config, findDirectives, isExcluded, isPageLink, isPeriodic, type Lang, labelOf, normalizeConfig, type ResolvedGroup, resolveLang,
   setTaskState, TEXT, taskOffsets, valueToMarkdown,
 } from "./core.ts";
 
@@ -194,6 +195,49 @@ async function buildGraph(currentPage: string, cfg: Config, lang: Lang) {
   return buildGraphData(currentPage, { links, pages, tasks }, cfg, lang);
 }
 
+// ---------------------------------------------------------------- similarity of pages by text
+// Reading every page takes a while, so it is done after the graph is shown (the panel asks for it) and remembered
+// per browser until some page changes. One computation at a time.
+const SIM_KEY = "constellationSimilarity";
+const SIM_READ_CHARS = 8000;
+let simRun: Promise<Pair[]> | null = null;
+
+async function computeSimilarity(): Promise<Pair[]> {
+  const cfg = await loadConfig();
+  if (!cfg.similarity) return [];
+  const pages = await syscall("index.queryLuaObjects", "page", { objectVariable: "p" }, {});
+  const lang = resolveLang(cfg.language);
+  const candidates = pages
+    .map((p: any) => ({ name: (p.name ?? p.ref) as string, stamp: String(p.lastModified ?? "") }))
+    .filter((p: { name: string }) => p.name && isPageLink(p.name) && !isExcluded(p.name, cfg) && !isPeriodic(p.name))
+    .sort((a: { name: string }, b: { name: string }) => (a.name < b.name ? -1 : 1));
+  if (candidates.length > cfg.similarityMaxPages) return [];
+  // the signature changes when a page appears, disappears or is edited
+  let h = 0;
+  for (const p of candidates) {
+    const text = p.name + "|" + p.stamp;
+    for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0;
+  }
+  const sig = `${candidates.length}:${h.toString(36)}`;
+  const cached = await clientStore.get(SIM_KEY).catch(() => null);
+  if (cached && cached.sig === sig && Array.isArray(cached.pairs)) return cached.pairs;
+  const docs: { id: string; title: string; text: string }[] = [];
+  for (let i = 0; i < candidates.length; i += 16) {
+    const batch = candidates.slice(i, i + 16);
+    const texts = await Promise.all(batch.map((p: { name: string }) =>
+      space.readPage(p.name).then((t: string) => t.slice(0, SIM_READ_CHARS)).catch(() => "")));
+    batch.forEach((p: { name: string }, k: number) => docs.push({ id: p.name, title: labelOf(p.name, lang, cfg), text: texts[k] }));
+  }
+  const pairs = similarPairs(docs);
+  await clientStore.set(SIM_KEY, { sig, pairs }).catch(() => { /* not remembered: counted again next time */ });
+  return pairs;
+}
+
+export function similarity(): Promise<Pair[]> {
+  if (!simRun) simRun = computeSimilarity().finally(() => { simRun = null; });
+  return simRun;
+}
+
 async function renderGraph(view: "full" | "side", atStart = false) {
   const cfg = await loadConfig();
   const lang = resolveLang(cfg.language);
@@ -202,21 +246,24 @@ async function renderGraph(view: "full" | "side", atStart = false) {
   // first start in this browser: the index is still being built — do not greet with an empty graph
   if (atStart && data.edges.length === 0) return;
   const options = await getOptions(cfg, data.groups);
-  const [d3Js, rendererJs, css] = await Promise.all([
+  const [d3Js, rendererJs, css, clusterJs] = await Promise.all([
     asset.readAsset(PLUG_NAME, "assets/d3.min.js"),
     asset.readAsset(PLUG_NAME, "assets/graph-render.js"),
     asset.readAsset(PLUG_NAME, "assets/graph-style.css"),
+    asset.readAsset(PLUG_NAME, "assets/graph-cluster.js"),
   ]);
   const style = css + "\n" + cfg.extraCss.replace(/<\/style/gi, "");
   const html = `<style>${style}</style><div id="cn-toolbar"></div><div id="cn-legend"></div>` +
     `<div id="cn-stage"><div id="cn-container"></div><div id="cn-card"></div></div>`;
   const script = `
     ${d3Js}
+    ${clusterJs}
     window.__CN_DATA__ = ${JSON.stringify(data)};
     window.__CN_DARK__ = ${JSON.stringify(!!isDark)};
     window.__CN_OPTIONS__ = ${JSON.stringify(options)};
     window.__CN_VIEW__ = ${JSON.stringify(view)};
     window.__CN_LANG__ = ${JSON.stringify(lang)};
+    window.__CN_SIMILARITY__ = ${JSON.stringify(cfg.similarity)};
     ${rendererJs}
   `;
   if (view === "full") {
