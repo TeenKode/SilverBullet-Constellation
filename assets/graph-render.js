@@ -171,7 +171,7 @@
   })();
   const spaceKey = (key) => (SPACE ? `${key}:${SPACE}` : key);
   // v2 — связи разной длины и простор для подписей (1.1): прежняя раскладка v1 не берётся, граф раскладывается заново
-const LAYOUT_KEY = spaceKey("constellation.layout.v2");
+const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const VIEW_KEY = spaceKey("constellation.view." + VIEW);
   // saved by the plug's previous name (observergraph) — picked up once, then saved under the new keys
   const LEGACY = {
@@ -221,9 +221,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v2");
   // so its neighbours spread around it in a wide ring instead of a tight clump where labels overlap.
   // Leaf-to-leaf links stay short, and closely related pages stay close.
   const endId = (e) => (typeof e === "object" ? e.id : e);
+  // The ring around a hub must hold its neighbours' labels: its circumference grows with the number of neighbours
+  // (~one label width, 90 px, per neighbour), so the link length grows almost linearly with the hub's degree.
   function linkSpread(l) {
     const hub = Math.max(degree(endId(l.source)), degree(endId(l.target)));
-    return Math.min(2.6, 0.75 + 0.3 * Math.sqrt(hub));
+    return Math.min(4.5, Math.max(0.75 + 0.3 * Math.sqrt(hub), hub * 90 / (2 * Math.PI) / 100));
   }
   // Room for the label: it hangs below the node, so the node needs space around it — half the label width,
   // not the whole of it (neighbouring labels are also moved apart by hiding overlaps, see cullLabels)
@@ -560,7 +562,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v2");
     const base = options.mode === "all" ? all.nodes : shown.map((n) => nodeById.get(n.id));
     const ids = base.filter((n) => n && passesFilters(n)).map((n) => n.id).sort();
     for (const d of ids) h = (Math.imul(h, 31) + Math.floor(hash01(d) * 1e9)) | 0;
-    return `f2:${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}:${options.labelSize}`;
+    return `f3:${ids.length}:${h}:${options.repel}:${options.linkDistance}:${options.nodeSize}:${options.labelSize}`;
   }
   // animate — when filters change, nodes glide to their new places instead of jumping
   let tween = null;
@@ -888,13 +890,19 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v2");
     if (cands.length > 600) return;
     const prio = (d) => (must(d) ? 0 : f && neighbour(f, d.id) ? 1 : 2);
     cands.sort((a, b) => prio(a) - prio(b) || (rankOf.get(a.id) || 0) - (rankOf.get(b.id) || 0));
+    // other nodes are obstacles too: a label drawn over someone else's circle is unreadable and hides the node
+    // margin: nodes drift ±3.5 px while floating, and a letter touching a circle already reads badly
+    const m = 5;
+    const dots = shown.map((d) => ({ id: d.id, x0: d.x - radius(d) - m, x1: d.x + radius(d) + m,
+      y0: d.y - radius(d) - m, y1: d.y + radius(d) + m }));
     const placed = [];
     for (const d of cands) {
       const size = must(d) ? fontSize * 1.15 : fontSize;
-      const w = Math.max(...d.lines.map((l) => l.length)) * size * 0.58;
+      const w = Math.max(...d.lines.map((l) => l.length)) * size * 0.62;
       const top = d.y + radius(d) + 2;
       const box = { x0: d.x - w / 2, x1: d.x + w / 2, y0: top, y1: top + d.lines.length * size * 1.18 };
-      const hit = placed.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
+      const over = (b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0;
+      const hit = placed.some(over) || dots.some((b) => b.id !== d.id && over(b));
       if (hit && !must(d)) culled.add(d.id);
       else placed.push(box);
     }
