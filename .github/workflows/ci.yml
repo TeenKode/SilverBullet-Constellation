@@ -31,6 +31,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Check in a real SilverBullet
         run: node scripts/check.mjs
+      - name: Labels of a dense graph do not overlap
+        run: node scripts/check-labels.mjs
 
   install:
     name: "Install from the latest release (Library: Install)"
