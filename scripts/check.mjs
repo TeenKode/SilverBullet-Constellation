@@ -185,6 +185,47 @@ async function main() {
     await toggleNebulae();
     await page.waitForTimeout(800);
     check("… and on again", await fr.evaluate(() => document.querySelectorAll(".cn-neb").length >= 1));
+    // stars: nodes as glowing stars with rays, the look switch and its settings
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-seg button")].find((b) => /^(Stars|Звёзды)$/.test(b.textContent)).click());
+    await page.waitForTimeout(800);
+    const star = await fr.evaluate(() => ({
+      rays: [...document.querySelectorAll("path.cn-rays")].filter((p) => p.style.display !== "none" && p.getAttribute("d")).length,
+      dots: document.querySelectorAll("circle.cn-dot").length,
+      fill: document.querySelector("circle.cn-dot").style.fill,
+      grads: document.querySelectorAll("radialGradient.cn-star-grad").length,
+      sliders: [...document.querySelectorAll(".cn-set-row")].filter((r) => /Star|звёзд/i.test(r.textContent)).length,
+    }));
+    check("stars: rays, glowing gradient, their settings", star.rays === star.dots && star.dots > 0 && /url\(/.test(star.fill)
+      && star.grads >= 1 && star.sliders >= 3, JSON.stringify(star));
+    if (shots) {
+      await page.evaluate(() => { client.runCommandByName("Editor: Toggle Dark Mode"); });
+      await page.waitForTimeout(1500);
+      fr = await graphFrame(page);
+      await page.screenshot({ path: join(shots, "stars-dark.png") });
+      await page.evaluate(() => { client.runCommandByName("Editor: Toggle Dark Mode"); });
+      await page.waitForTimeout(1200);
+      fr = await graphFrame(page);
+      await page.screenshot({ path: join(shots, "stars-light.png") });
+    }
+    await fr.evaluate(() => {
+      if (!document.querySelector("#cn-settings.open, .cn-settings.open")) {
+        document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click();
+      }
+    });
+    await page.waitForTimeout(500);
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-seg button")].find((b) => /^(Dots|Кружки)$/.test(b.textContent)).click());
+    await page.waitForTimeout(500);
+    // label font: a choice in the settings, applied to all text of the graph; labels without a dark outline
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-seg button")].find((b) => /^(Serif|С засечками)$/.test(b.textContent)).click());
+    await page.waitForTimeout(400);
+    const font = await fr.evaluate(() => ({ family: getComputedStyle(document.querySelector("text.cn-label")).fontFamily,
+      stroke: getComputedStyle(document.querySelector("text.cn-label")).stroke,
+      neb: getComputedStyle(document.querySelector("text.cn-neb-label")).stroke }));
+    check("label font can be changed, no outline around letters", /Georgia|serif/i.test(font.family)
+      && font.stroke === "none" && font.neb === "none", JSON.stringify(font));
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-seg button")].find((b) => /^(Plain|Обычный)$/.test(b.textContent)).click());
+    await page.waitForTimeout(300);
+    check("… and back to dots", await fr.evaluate(() => [...document.querySelectorAll("path.cn-rays")].every((p) => p.style.display === "none")));
     await fr.evaluate(() => document.querySelector(".cn-set-actions [data-act=reset]").click());
     await page.waitForTimeout(800);
     await fr.evaluate(() => document.querySelector(".cn-icon[data-act=close]").click());
@@ -238,21 +279,21 @@ async function main() {
     await page.waitForTimeout(1200);
     check("“All time” brings them back", Object.keys(await layout(fr)).length === Object.keys(beforeTime).length);
     if (shots) {
-      await page.evaluate(() => client.runCommandByName("Editor: Toggle Dark Mode"));
+      await page.evaluate(() => { client.runCommandByName("Editor: Toggle Dark Mode"); });
       await page.waitForTimeout(1500);
       fr = await graphFrame(page);
       await page.screenshot({ path: join(shots, "graph-dark.png") });
-      await page.evaluate(() => client.runCommandByName("Editor: Toggle Dark Mode"));
+      await page.evaluate(() => { client.runCommandByName("Editor: Toggle Dark Mode"); });
       await page.waitForTimeout(1000);
       fr = await graphFrame(page);
     }
 
     // dark theme on the fly (the graph has focus, so the command is run directly)
-    await page.evaluate(() => client.runCommandByName("Editor: Toggle Dark Mode"));
+    await page.evaluate(() => { client.runCommandByName("Editor: Toggle Dark Mode"); });
     await page.waitForTimeout(1500);
     fr = await graphFrame(page);
     check("dark theme on the fly", !!fr && await fr.evaluate(() => document.documentElement.getAttribute("data-theme")) === "dark");
-    await page.evaluate(() => client.runCommandByName("Editor: Toggle Dark Mode"));
+    await page.evaluate(() => { client.runCommandByName("Editor: Toggle Dark Mode"); });
     await page.waitForTimeout(1500);
 
     // side panel

@@ -25,7 +25,8 @@ work**. You can tick off tasks without leaving the graph.
 - **Marks**: a red ring on pages with overdue tasks, and “in N days” on upcoming events.
 - **Links from task attributes**: `[who: Ann]` can link the page to `People/Ann`, so people are not orphans.
 - **Constellations**: pages about the same thing gather and glow like nebulae, each with its own color and a name
-  (click the name to zoom in, hover it to highlight the pages). They are found from the links between pages *and* from
+  (click the name to zoom in, hover it to highlight the pages). Long names wrap into a few lines, and names push
+  each other apart so they do not pile up. They are found from the links between pages *and* from
   the similarity of their texts (TF-IDF, computed in the browser and remembered until a page changes). Day and week
   summaries are left out: they link everything with everything. Optional thin threads show pages that are alike but
   not linked.
@@ -34,8 +35,10 @@ work**. You can tick off tasks without leaving the graph.
   - motion: drift, calm, or still; repulsion, link length, pull to the center;
   - constellations: nebulae on/off, brightness, softness of the edges, color (own or by group), names, links ↔ text
     balance, strictness, size, smallest constellation, how strongly they gather, similarity threads;
+  - nodes as dots or as **stars** — a white-hot core, a glow of the group color and rays, bigger for pages with
+    more links (glow, rays and core are adjustable);
   - node size (by links or equal), link width and brightness, starry background, twinkling, dimming on hover;
-  - labels: which to show, brightness, and size;
+  - labels: which to show, brightness, size, and font (plain, serif, narrow, mono, rounded, or the SilverBullet one);
   - group colors, timeline brightness, marks, and opening on start.
 - English and Russian interface; light and dark theme (follows SilverBullet on the fly); touch friendly.
 - Several spaces on one server (multi-user SilverBullet) each keep their own layout.
