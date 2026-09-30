@@ -436,6 +436,10 @@ body.cn-full #cn-legend { padding: 7px 14px; }
   transition: opacity 0.25s ease, stroke 0.2s ease, stroke-width 0.2s ease, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   transform-box: fill-box; transform-origin: center;
 }
+/* the label font is chosen in the settings (--cn-font, set on body) */
+svg text { font-family: var(--cn-font, "Inter", "Segoe UI", system-ui, sans-serif); }
+.cn-seg-wrap { flex-wrap: wrap; }
+.cn-seg-wrap button { flex: 1 0 30%; }
 .cn-label { transition: opacity 0.25s ease, font-size 0.15s ease; user-select: none; }
 .cn-links line { transition: opacity 0.3s ease, stroke 0.25s ease, stroke-width 0.2s ease; stroke-linecap: round; }
 .cn-links { transition: none; }
@@ -483,14 +487,10 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  paint-order: stroke;
-  stroke: var(--cn-bg);
-  stroke-width: 3px;
-  stroke-opacity: 0.55;
   pointer-events: all;
   cursor: default;
   user-select: none;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.25s ease, transform 0.6s ease;   /* names glide apart instead of jumping */
 }
 .cn-sims line { stroke: var(--cn-edge-hi); stroke-width: 1; stroke-dasharray: 2 5; stroke-linecap: round; fill: none; }
 #cn-container.cn-starfield {

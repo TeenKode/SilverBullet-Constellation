@@ -60,11 +60,12 @@
     starGlow: 60,             // how far the glow spreads, %
     starRays: 50,             // ray length, % (0 — no rays)
     starCore: 60,             // how big and white the hot core is, %
+    font: "default",          // label font: default, serif, narrow, mono, rounded, sb (as in SilverBullet)
   };
   const SETTING_KEYS = ["motion", "repel", "linkDistance", "nodeSize", "linkWidth", "labels", "labelOpacity", "labelSize",
     "colors", "freshBright", "marks", "gravity", "nodeSizeBy", "linkOpacity", "hoverFocus", "nearDepth", "starfield", "twinkle",
     "nebulae", "nebulaOpacity", "nebulaSoft", "nebulaColor", "nebulaLabels", "nebulaMin", "textWeight", "similarity",
-    "clusterSize", "clusterPull", "simLinks", "nodeStyle", "starGlow", "starRays", "starCore"];
+    "clusterSize", "clusterPull", "simLinks", "nodeStyle", "starGlow", "starRays", "starCore", "font"];
 
   const LANG = window.__CN_LANG__ === "ru" ? "ru" : "en";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -97,6 +98,9 @@
       nodeStyle: "Nodes look like", styleDots: ["Dots", "Flat colored circles"],
       styleStars: ["Stars", "A white-hot core, a colored glow and rays"],
       starGlow: "Star glow", starRays: "Star rays", starCore: "Star core",
+      font: "Font", fontDefault: ["Plain", "The interface font"], fontSerif: ["Serif", "Georgia, Times"],
+      fontNarrow: ["Narrow", "Condensed: long names take less room"], fontMono: ["Mono", "Monospaced"],
+      fontRounded: ["Rounded", "Soft rounded letters"], fontSb: ["As in SB", "The font of your SilverBullet editor"],
       sizeLinks: ["Links", "The more links a page has, the bigger its node"], sizeSame: ["Equal", "All nodes are the same size"],
       linkOpacity: "Link brightness", hoverFocus: ["Dim the rest on hover", "The hovered node, its links and neighbours stay bright, everything else dims"],
       nearDepth: "“Nearby” — steps", starfield: ["Starry background", "Tiny stars behind the graph"],
@@ -143,6 +147,9 @@
       nodeStyle: "Узлы — это", styleDots: ["Кружки", "Плоские цветные кружки"],
       styleStars: ["Звёзды", "Раскалённое белое ядро, сияние цвета раздела и лучи"],
       starGlow: "Сияние звёзд", starRays: "Лучи звёзд", starCore: "Ядро звёзд",
+      font: "Шрифт", fontDefault: ["Обычный", "Шрифт интерфейса"], fontSerif: ["С засечками", "Georgia, Times"],
+      fontNarrow: ["Узкий", "Сжатый: длинные названия занимают меньше места"], fontMono: ["Моно", "Моноширинный"],
+      fontRounded: ["Круглый", "Мягкие скруглённые буквы"], fontSb: ["Как в SB", "Шрифт редактора SilverBullet"],
       sizeLinks: ["Связям", "Чем больше связей у страницы, тем крупнее узел"], sizeSame: ["Одинаковый", "Все узлы одного размера"],
       linkOpacity: "Яркость связей", hoverFocus: ["Приглушать остальное при наведении", "Наведённый узел, его связи и соседи яркие, остальное тускнеет"],
       nearDepth: "«Рядом» — шагов", starfield: ["Звёздный фон", "Мелкие звёзды за графом"],
@@ -207,7 +214,6 @@
     readPalette();
     updateColors();
     drawLegend();
-    if (nodeSel) nodeSel.selectAll("text").attr("stroke", palette.bg);
     restyle();
     if (settingsPanel.classList.contains("open")) renderSettings();
   });
@@ -907,13 +913,10 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
             .style("--d", (d) => (2.6 + hash01(d.id + "^") * 3.4).toFixed(2) + "s")
             .style("--dl", (d) => (-hash01(d.id + "!") * 6).toFixed(2) + "s");
           ng.append("title").text((d) => d.id);
-          const text = ng.append("text").attr("class", "cn-label")
-            .attr("text-anchor", "middle")
-            .attr("paint-order", "stroke").attr("stroke", palette.bg).attr("stroke-width", 3);
+          const text = ng.append("text").attr("class", "cn-label").attr("text-anchor", "middle");
           text.selectAll("tspan").data((d) => d.lines).join("tspan")
             .attr("x", 0).attr("dy", (_l, i) => (i ? "1.15em" : "0.95em")).text((l) => l);
-          ng.append("text").attr("class", "cn-soon").attr("text-anchor", "middle")
-            .attr("paint-order", "stroke").attr("stroke", palette.bg).attr("stroke-width", 3);
+          ng.append("text").attr("class", "cn-soon").attr("text-anchor", "middle");
           return ng.call(enter);
         },
         (up) => up.classed("cn-leaving", false),
@@ -1009,14 +1012,21 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     });
     nebLabelSel = nebTextLayer.selectAll("text.cn-neb-label").data(options.nebulaLabels ? data : [], (x) => x.c.id)
       .join((en) => en.append("text").attr("class", "cn-neb-label").attr("text-anchor", "middle"), (up) => up, (ex) => ex.remove());
+    // a long name — in a few lines around the center of the constellation, not one long band across the graph
+    nebLabelSel.each(function (x) {
+      const lines = wrapLabel(x.c.name, 14, 3);
+      d3.select(this).selectAll("tspan").data(lines).join("tspan")
+        .attr("dy", (_l, i) => (i ? "1.1em" : (0.35 - (lines.length - 1) * 0.55).toFixed(2) + "em"))
+        .text((l) => l);
+    });
     nebLabelSel
-      .text((x) => truncate(x.c.name, 26))
       .on("pointerenter", (e, x) => { hoverCluster = x.c.id; restyle(); })
       .on("pointerleave", () => { hoverCluster = null; restyle(); })
       // a click on the name brings the constellation closer
       .on("click", (event, x) => { event.stopPropagation(); fit(500, false, undefined, x.members); });
     styleNebulae();
     placeNebulae();
+    cullNebLabels();
   }
   function styleNebulae() {
     if (!nebLayer) return;
@@ -1035,13 +1045,74 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         .style("opacity", (x) => (hoverCluster ? (hoverCluster === x.c.id ? 0.95 : 0.15) : 0.55 * Math.min(1, 0.4 + options.nebulaOpacity / 60)));
     }
   }
+  // Names of constellations push each other apart like nodes do: overlapping names slide away (a soft spring
+  // pulls each back to the center of its constellation), and glide there (CSS transition on transform).
+  // Only a name that cannot be moved far enough without leaving its constellation is hidden (shown on hover).
+  const nebOffsets = new Map();
+  function cullNebLabels() {
+    if (!nebLabelSel) return;
+    const items = [];
+    nebLabelSel.each(function (x) {
+      const size = parseFloat(this.style.fontSize) || 20;
+      const lines = [...this.querySelectorAll("tspan")].map((t) => t.textContent);
+      const w = Math.max(...lines.map((l) => textWidth(l.toUpperCase(), size, true) + 0.16 * size * l.length)) + 6;
+      const h = lines.length * 1.1 * size + 4;
+      const cx = x.members.reduce((s, d) => s + d.x, 0) / x.members.length;
+      const cy = x.members.reduce((s, d) => s + d.y, 0) / x.members.length;
+      const prev = nebOffsets.get(x.c.id) || { x: 0, y: 0 };
+      items.push({ el: this, x, w, h, cx, cy, ox: prev.x, oy: prev.y, m: x.members.length,
+        limit: Math.max(w, h) * 0.9, seed: hash01(x.c.id) - 0.5 });
+    });
+    const overlap = (p, q) => [(p.w + q.w) / 2 - Math.abs(p.cx + p.ox - q.cx - q.ox),
+      (p.h + q.h) / 2 - Math.abs(p.cy + p.oy - q.cy - q.oy)];
+    for (let it = 0; it < 80; it++) {
+      let moved = false;
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const p = items[i], q = items[j];
+          const [dx, dy] = overlap(p, q);
+          if (dx <= 0 || dy <= 0) continue;
+          moved = true;
+          // the bigger constellation keeps its name closer to its center
+          const sp = q.m / (p.m + q.m), sq = 1 - sp;
+          if (dx < dy) {
+            const dir = Math.sign(p.cx + p.ox - q.cx - q.ox) || Math.sign(p.seed - q.seed) || 1;
+            p.ox += dir * dx * sp; q.ox -= dir * dx * sq;
+          } else {
+            const dir = Math.sign(p.cy + p.oy - q.cy - q.oy) || Math.sign(p.seed - q.seed) || 1;
+            p.oy += dir * dy * sp; q.oy -= dir * dy * sq;
+          }
+        }
+      }
+      for (const p of items) {
+        p.ox *= 0.97; p.oy *= 0.97;                       // spring back to the center
+        const len = Math.hypot(p.ox, p.oy);
+        if (len > p.limit) { p.ox *= p.limit / len; p.oy *= p.limit / len; }
+      }
+      if (!moved && it > 5) break;
+    }
+    // what still overlaps — the smaller one hides (big ones first)
+    items.sort((a, b) => b.m - a.m);
+    const kept = [];
+    for (const p of items) {
+      const hit = kept.some((q) => { const [dx, dy] = overlap(p, q); return dx > 2 && dy > 2; });
+      const keep = !hit || hoverCluster === p.x.c.id;
+      p.el.style.display = keep ? "" : "none";
+      if (keep) kept.push(p);
+      nebOffsets.set(p.x.c.id, { x: p.ox, y: p.oy });
+      p.el.style.transform = `translate(${p.ox.toFixed(1)}px, ${p.oy.toFixed(1)}px)`;
+    }
+  }
   function placeNebulae() {
     if (nebSel) {
       nebSel.selectAll("circle").attr("cx", (d) => d.x).attr("cy", (d) => d.y);
     }
     if (nebLabelSel) {
-      nebLabelSel.attr("x", (x) => x.members.reduce((s, d) => s + d.x, 0) / x.members.length)
-        .attr("y", (x) => x.members.reduce((s, d) => s + d.y, 0) / x.members.length);
+      nebLabelSel.each(function (x) {
+        const cx = x.members.reduce((s, d) => s + d.x, 0) / x.members.length;
+        const cy = x.members.reduce((s, d) => s + d.y, 0) / x.members.length;
+        d3.select(this).attr("x", cx).attr("y", cy).selectAll("tspan").attr("x", cx);
+      });
     }
   }
   function drawSims() {
@@ -1158,10 +1229,36 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   // Labels must not overlap: going from the most important (open, selected, hovered and its neighbours, search
   // hits, then by link count), a label whose box overlaps an already placed one is hidden. Boxes are in graph
   // coordinates with the current font size, so zooming in frees room and brings hidden labels back.
+  // ---- label font
+  const FONTS = {
+    default: '"Inter", "Segoe UI", system-ui, sans-serif',
+    serif: 'Georgia, "PT Serif", "Times New Roman", serif',
+    narrow: '"Roboto Condensed", "Arial Narrow", "PT Sans Narrow", "Liberation Sans Narrow", sans-serif',
+    mono: '"JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace',
+    rounded: '"Nunito", "Segoe UI Rounded", "Arial Rounded MT Bold", Comfortaa, system-ui, sans-serif',
+  };
+  function sbFont() {
+    // the panel is an iframe of SilverBullet (srcdoc — the same origin): take the font of its editor
+    try {
+      const doc = window.parent.document;
+      const el = doc.querySelector(".cm-content") || doc.querySelector("#sb-main") || doc.body;
+      return window.parent.getComputedStyle(el).fontFamily || FONTS.default;
+    } catch (_e) {
+      return FONTS.default;
+    }
+  }
+  function applyFont() {
+    const family = options.font === "sb" ? sbFont() : FONTS[options.font] || FONTS.default;
+    if (document.body.style.getPropertyValue("--cn-font") !== family) {
+      document.body.style.setProperty("--cn-font", family);
+      textWidths.clear();                       // widths of labels are measured in the font
+    }
+  }
+
   // Real width of a label line, measured by a hidden label in the same SVG (the same font as the labels):
   // letters differ, Cyrillic is wider than the old 0.62 em guess
   let measureText = null;
-  const textWidths = new Map();
+  var textWidths = new Map();
   function textWidth(line, size, bold) {
     const key = `${bold ? 1 : 0}|${line}`;
     let w = textWidths.get(key);
@@ -1328,6 +1425,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .style("fill", (d) => colorOf(d))
       .style("display", twinkling && !stars ? null : "none");
     styleNebulae();
+    cullNebLabels();
     pulse.classed("on", !!(hovered && cardHover && shown.some((n) => n.id === hovered)))
       .style("stroke", hovered ? colorOf(nodeById.get(hovered) || { group: "other" }) : null);
   }
@@ -1703,6 +1801,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     } else startMotion(0.35);
   };
   const applyLook = () => {
+    applyFont();
     container.classList.toggle("cn-starfield", !!options.starfield);
     restyle();
   };
@@ -1716,7 +1815,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   function segmented(label, key, choices, apply) {
     const row = document.createElement("div");
     row.className = "cn-set-row";
-    row.innerHTML = `<div class="cn-set-label">${label}</div><div class="cn-seg"></div>`;
+    row.innerHTML = `<div class="cn-set-label">${label}</div><div class="cn-seg${choices.length > 3 ? " cn-seg-wrap" : ""}"></div>`;
     const seg = row.querySelector(".cn-seg");
     for (const [value, text, hint] of choices) {
       const b = document.createElement("button");
@@ -1836,6 +1935,10 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     ], applyLook));
     labels.appendChild(slider(T.labelOpacity, "labelOpacity", 10, 100, 5, " %", applyLook));
     labels.appendChild(slider(T.labelSize, "labelSize", 70, 160, 5, " %", applyLook));
+    labels.appendChild(segmented(T.font, "font", [
+      ["default", ...T.fontDefault], ["serif", ...T.fontSerif], ["narrow", ...T.fontNarrow],
+      ["mono", ...T.fontMono], ["rounded", ...T.fontRounded], ["sb", ...T.fontSb],
+    ], applyLook));
     body.appendChild(labels);
 
     const colors = section(T.colors);
@@ -1920,6 +2023,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   }
 
   container.classList.toggle("cn-starfield", !!options.starfield);
+  applyFont();
   draw(false);
   loadSimilarity();
   if (VIEW === "full" && window.__CN_SELECT__ && nodeById.has(window.__CN_SELECT__)) openCard(window.__CN_SELECT__);
