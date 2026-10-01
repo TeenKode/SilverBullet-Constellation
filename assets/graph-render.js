@@ -33,7 +33,9 @@
     labelOpacity: 55,         // label brightness at rest, %
     labelSize: 100,           // label size, %
     colors: {},               // custom group colors
-    period: 0,                // timeline: show pages from the last N days (0 — all time)
+    period: 0,                // timeline: pages not older than N days (0 — no lower bound)
+    periodTo: 0,              // timeline: pages not newer than N days (0 — up to today, with the coming ones)
+    timelineOpen: false,      // the timeline panel under the graph is open
     freshBright: true,        // recent pages brighter, older ones fade
     marks: true,              // a ring on pages with overdue tasks, “in N days” on upcoming events
     gravity: 30,              // pull of the nodes to the center, 0–100
@@ -77,7 +79,8 @@
       pickPage: "Nearby shows the surroundings of a page: click a node first",
       orphans: ["Orphans", "Show pages without links"], search: "Search…", fit: "Fit the graph to the window",
       settings: "Graph settings", closeGraph: "Close the graph (Esc)", timeline: "Timeline: which pages to show",
-      since: (d) => `since ${d}`, allTime: "All time", allTimeHint: "Click to show all time", show: "Show", hide: "Hide",
+      since: (d) => `since ${d}`, tlRange: (a, b) => `${a} — ${b}`, tlDay: "Day", tlWeek: "Week", tlMonth: "Month",
+      tlHint: "Drag the frame to slide the period, its edges to resize; drag on empty space to draw a new one", allTime: "All time", allTimeHint: "Click to show all time", show: "Show", hide: "Hide",
       hiddenPages: "Hidden pages", hiddenHint: "Right-click a node to hide it", hiddenNone: "none", showAll: "Show all",
       pageHidden: (n) => `Hidden: ${n}`, undo: "Undo",
       empty: "No linked pages yet", close: "Close (Esc)", closeShort: "Close", linked: "Linked", openPage: "Open page",
@@ -133,7 +136,8 @@
       pickPage: "«Рядом» показывает окружение страницы: сначала нажмите на узел",
       orphans: ["Без связей", "Показать страницы без ссылок"], search: "Поиск…", fit: "Вписать граф в окно",
       settings: "Настройки графа", closeGraph: "Закрыть граф (Esc)", timeline: "Лента времени: какие страницы показывать",
-      since: (d) => `с ${d}`, allTime: "Всё время", allTimeHint: "Нажмите — показать всё время", show: "Показать", hide: "Скрыть",
+      since: (d) => `с ${d}`, tlRange: (a, b) => `${a} — ${b}`, tlDay: "День", tlWeek: "Неделя", tlMonth: "Месяц",
+      tlHint: "Тяните рамку — сдвинете период, края — изменится длина; тяните по пустому месту — новый период", allTime: "Всё время", allTimeHint: "Нажмите — показать всё время", show: "Показать", hide: "Скрыть",
       hiddenPages: "Скрытые страницы", hiddenHint: "Правый клик по узлу — скрыть его", hiddenNone: "нет", showAll: "Показать все",
       pageHidden: (n) => `Скрыто: ${n}`, undo: "Отменить",
       empty: "В базе пока нет страниц со ссылками", close: "Закрыть (Esc)", closeShort: "Закрыть", linked: "Связано",
@@ -476,7 +480,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const dayMs = 86400000;
   const ageDays = (date) => Math.round((Date.parse(TODAY + "T12:00:00") - Date.parse(date + "T12:00:00")) / dayMs);
   const shiftDate = (days) => new Date(Date.parse(TODAY + "T12:00:00") - days * dayMs).toISOString().slice(0, 10);
-  const inPeriod = (n) => !options.period || !n.date || ageDays(n.date) <= options.period;
+  const inPeriod = (n) => {
+    if (!n.date || (!options.period && !options.periodTo)) return true;
+    const age = ageDays(n.date);
+    return (!options.period || age <= options.period) && (!options.periodTo || age >= options.periodTo);
+  };
   // recent ones brighter: full brightness up to a week, fading towards four months
   const freshness = (d) => {
     if (!options.freshBright || !d.date) return 1;
@@ -559,42 +567,170 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const timeBox = document.createElement("span");
   timeBox.className = "cn-time";
   legend.appendChild(timeBox);
-  buildTimeline();
 
-  // Timeline: the slider picks the first date to show (left — all time, right — the last days)
+  // Timeline: a panel under the graph, like the one of a video recorder. Bars — how many pages are dated each day
+  // (colors of the groups); the frame on them is the period shown: drag it, its edges, or draw a new one.
+  // The button in the legend opens and closes the panel and tells the period.
+  let tlPanel = null, drawTimeline = () => {};
   function buildTimeline() {
     const ages = all.nodes.filter((n) => n.date).map((n) => ageDays(n.date)).filter((a) => a >= 0);
-    const span = ages.length ? Math.max(...ages) : 0;
-    if (span < 2) { timeBox.style.display = "none"; return; }
-    timeBox.innerHTML = '<span class="cn-time-label"></span><input type="range" class="cn-time-range" min="0" step="1">';
-    const range = timeBox.querySelector("input");
+    const oldest = ages.length ? Math.max(...ages) : 0;
+    if (oldest < 2) { timeBox.style.display = "none"; return; }
+    const span = oldest;
+    timeBox.innerHTML = '<button class="cn-btn cn-time-toggle"><span class="cn-time-label"></span> <span class="cn-time-caret"></span></button>';
+    const toggle = timeBox.querySelector("button");
+    toggle.title = T.timeline;
     const label = timeBox.querySelector(".cn-time-label");
-    range.max = String(span);
-    range.title = T.timeline;
-    const fromValue = () => (Number(range.value) === 0 ? 0 : Math.max(1, span - Number(range.value)));
-    const show = () => {
-      const period = fromValue();
-      label.textContent = period ? T.since(formatDate(shiftDate(period))) : T.allTime;
-      timeBox.classList.toggle("active", !!period);
+    const caret = timeBox.querySelector(".cn-time-caret");
+    tlPanel = document.createElement("div");
+    tlPanel.id = "cn-timeline";
+    tlPanel.innerHTML = `<div class="cn-tl-head"><span class="cn-tl-presets"></span><span class="cn-tl-range"></span></div>` +
+      '<svg class="cn-tl-svg"><title></title></svg>';
+    tlPanel.querySelector("svg title").textContent = T.tlHint;
+    stage.after(tlPanel);
+    cleanup.push(() => { tlPanel.remove(); });
+    const presets = tlPanel.querySelector(".cn-tl-presets");
+    const rangeText = tlPanel.querySelector(".cn-tl-range");
+    const tl = d3.select(tlPanel.querySelector("svg"));
+    const shortDate = (age) => {
+      const iso = shiftDate(age);
+      return LANG === "ru" ? `${iso.slice(8)}.${iso.slice(5, 7)}` : `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8))}`;
     };
-    range.value = String(options.period ? Math.max(0, span - Math.min(options.period, span)) : 0);
-    show();
+    const hi = () => options.period || span;            // the old edge of the frame, days ago
+    const lo = () => options.periodTo;                  // the new edge
+    const isAll = () => !options.period && !options.periodTo;
+    const text = () => (isAll() ? T.allTime : T.tlRange(formatDate(shiftDate(hi())), lo() ? formatDate(shiftDate(lo())) : T.today));
+    const show = () => {
+      label.textContent = isAll() ? T.allTime : T.tlRange(shortDate(hi()), lo() ? shortDate(lo()) : T.today);
+      timeBox.classList.toggle("active", !isAll());
+      rangeText.textContent = text();
+      for (const b of presets.children) b.classList.toggle("active", b.dataset.days === String(options.period) && !options.periodTo);
+    };
+    const preset = (days) => { options.period = days; options.periodTo = 0; commit(true); };
+    for (const [days, name] of [[1, T.tlDay], [7, T.tlWeek], [30, T.tlMonth], [0, T.allTime]]) {
+      const b = document.createElement("button");
+      b.className = "cn-btn"; b.textContent = name; b.dataset.days = String(days);
+      b.addEventListener("click", () => preset(days));
+      presets.appendChild(b);
+    }
     let frame = 0;
-    range.addEventListener("input", () => {
-      options.period = fromValue();
-      show();
+    function commit(save) {
+      show(); draw();
       if (!frame) frame = requestAnimationFrame(() => { frame = 0; refresh(false); });
+      if (save) { saveOption("period", options.period); saveOption("periodTo", options.periodTo); }
+    }
+
+    let W = 600;
+    const H = 58, BARS = 42;
+    // a day takes one cell: the left edge of the day at `age` days ago, the right edge of it
+    const xL = (age) => (span - age) / (span + 1) * W;
+    const xR = (age) => (span - age + 1) / (span + 1) * W;
+    const ageAt = (x) => Math.max(0, Math.min(span, span - Math.floor(x / W * (span + 1))));
+    function draw() {
+      if (!tlPanel || tlPanel.style.display === "none") return;
+      W = tlPanel.querySelector("svg").clientWidth || 600;
+      tl.selectAll("g").remove();
+      const nb = Math.max(1, Math.min(span + 1, Math.floor(W / 6)));
+      const per = (span + 1) / nb, bw = W / nb;
+      const stacks = Array.from({ length: nb }, () => ({}));
+      let top = 1;
+      for (const n of all.nodes) {
+        if (!n.date) continue;
+        const age = ageDays(n.date);
+        if (age < 0 || age > span) continue;
+        const i = Math.min(nb - 1, Math.floor((span - age) / per));
+        stacks[i][n.group] = (stacks[i][n.group] || 0) + 1;
+      }
+      for (const st of stacks) top = Math.max(top, Object.values(st).reduce((x, y) => x + y, 0));
+      const bars = tl.append("g").attr("class", "cn-tl-bars");
+      stacks.forEach((st, i) => {
+        let y = BARS;
+        const total = Object.values(st).reduce((x, y2) => x + y2, 0);
+        const first = shiftDate(Math.round(span - i * per)), tip = `${formatDate(first)}: ${total}`;
+        for (const g of GROUPS) {
+          const c = st[g.id];
+          if (!c) continue;
+          const h = c / top * (BARS - 4);
+          y -= h;
+          bars.append("rect").attr("x", i * bw + 0.5).attr("y", y).attr("width", Math.max(1, bw - 1)).attr("height", h)
+            .attr("fill", groupColor[g.id] || groupColor.other).attr("class", "cn-tl-bar").append("title").text(tip);
+        }
+      });
+      const axis = tl.append("g").attr("class", "cn-tl-axis");
+      const ticks = Math.min(span, Math.max(1, Math.floor(W / 90)));
+      let lastX = -1e9;
+      for (let t = 0; t <= ticks; t++) {
+        const age = Math.round(span - t * span / ticks), x = xL(age);
+        if (x - lastX < 60) continue;
+        lastX = x;
+        axis.append("rect").attr("x", x).attr("y", BARS).attr("width", 1).attr("height", 3);
+        axis.append("text").attr("x", x).attr("y", H - 2).attr("text-anchor", t === 0 ? "start" : "middle").text(shortDate(age));
+      }
+      const x0 = isAll() ? 0 : xL(hi()), x1 = isAll() ? W : Math.max(x0 + 6, xR(lo()));
+      const win = tl.append("g").attr("class", "cn-tl-win" + (isAll() ? " all" : ""));
+      win.append("rect").attr("class", "cn-tl-frame").attr("x", x0).attr("y", 1).attr("width", x1 - x0).attr("height", BARS);
+      win.append("rect").attr("class", "cn-tl-handle").attr("x", x0 - 1).attr("y", 1).attr("width", 3).attr("height", BARS);
+      win.append("rect").attr("class", "cn-tl-handle").attr("x", x1 - 2).attr("y", 1).attr("width", 3).attr("height", BARS);
+    }
+    drawTimeline = draw;
+
+    // the frame: edges, body, empty space (a new frame)
+    let drag = null;
+    const svgNode = tlPanel.querySelector("svg");
+    const part = (x) => {
+      const x0 = isAll() ? 0 : xL(hi()), x1 = isAll() ? W : xR(lo());
+      if (!isAll() && Math.abs(x - x0) < 8) return "l";
+      if (!isAll() && Math.abs(x - x1) < 8) return "r";
+      return !isAll() && x > x0 && x < x1 ? "m" : "n";
+    };
+    svgNode.addEventListener("pointermove", (e) => {
+      const x = d3.pointer(e, svgNode)[0];
+      if (!drag) { svgNode.style.cursor = { l: "ew-resize", r: "ew-resize", m: "grab", n: "crosshair" }[part(x)]; return; }
+      const d = Math.round((x - drag.x) / W * (span + 1));               // days towards today
+      let h = drag.hi, l = drag.lo;
+      if (drag.part === "l") h = Math.max(drag.lo + 1, Math.min(span, drag.hi - d));
+      else if (drag.part === "r") l = Math.max(0, Math.min(drag.hi - 1, drag.lo - d));
+      else if (drag.part === "m") {
+        const shift = Math.max(-drag.lo, Math.min(span - drag.hi, -d));
+        h = drag.hi + shift; l = drag.lo + shift;
+      } else {
+        const a = ageAt(drag.x), b = ageAt(x);
+        h = Math.max(a, b, 1); l = Math.min(a, b);
+        if (h - l < 1) l = Math.max(0, h - 1);
+      }
+      options.period = h >= span ? 0 : h;
+      options.periodTo = l;
+      if (options.period === 0 && options.periodTo >= span) options.periodTo = span - 1;
+      commit(false);
     });
-    range.addEventListener("change", () => saveOption("period", options.period));
-    label.addEventListener("click", () => {
-      range.value = "0";
-      options.period = 0;
-      show();
-      saveOption("period", 0);
-      refresh(false);
+    svgNode.addEventListener("pointerdown", (e) => {
+      const x = d3.pointer(e, svgNode)[0];
+      drag = { part: part(x), x, hi: hi(), lo: lo() };
+      svgNode.setPointerCapture(e.pointerId);
+      if (drag.part === "m") svgNode.style.cursor = "grabbing";
     });
-    label.title = T.allTimeHint;
+    const end = () => { if (!drag) return; drag = null; commit(true); };
+    svgNode.addEventListener("pointerup", end);
+    svgNode.addEventListener("pointercancel", end);
+    svgNode.addEventListener("dblclick", () => preset(0));
+
+    const open = (on, initial) => {
+      options.timelineOpen = on;
+      tlPanel.style.display = on ? "" : "none";
+      caret.textContent = on ? "▾" : "▴";
+      toggle.classList.toggle("on", on);
+      if (on) draw();
+      if (initial) return;                 // the graph is not drawn yet
+      viewArea = 0;
+      restyle();
+    };
+    toggle.addEventListener("click", () => { open(!options.timelineOpen); saveOption("timelineOpen", options.timelineOpen); });
+    listen(window, "resize", () => draw());
+    show();
+    open(!!options.timelineOpen, true);
   }
+
+  buildTimeline();
 
   function drawLegend() {
     const counts = {};
