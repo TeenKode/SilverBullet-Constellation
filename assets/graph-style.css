@@ -482,6 +482,7 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
 
 /* ---- constellations: nebulae, names, threads of similarity, starry background, twinkling */
 .cn-nebulae, .cn-neb-labels, .cn-sims { pointer-events: none; }
+.cn-neb circle { pointer-events: all; cursor: pointer; }
 .cn-neb { transition: opacity 0.25s ease; }
 .cn-neb-label {
   font-weight: 600;
