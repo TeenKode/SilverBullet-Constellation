@@ -289,6 +289,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   let clusters = [];                 // [{id, members, name, size}]
   let clusterById = new Map();
   let hoverCluster = null;
+  let pinnedCluster = null;   // a nebula chosen by click: the rest stays dimmed until the click on empty space
+  const activeCluster = () => pinnedCluster || hoverCluster;
   function recluster() {
     clusterOf = new Map(); clusters = []; clusterById = new Map();
     if (!options.nebulae || !window.CNCluster) return;
@@ -825,7 +827,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       })
       .on("end", () => saveView());
     svg.call(zoom).on("dblclick.zoom", null);
-    svg.on("click", (event) => { if (event.target === svg.node()) closeCard(); });
+    svg.on("click", (event) => { if (event.target === svg.node()) { pinnedCluster = null; closeCard(); restyle(); } });
     // nebulae: colored circles under the stars, blurred and “torn” by noise into a cloud
     const defs = (svgDefs = svg.append("defs"));
     const filter = defs.append("filter").attr("id", "cn-neb-filter").attr("x", "-40%").attr("y", "-40%")
@@ -962,8 +964,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       else if (!d.isCurrent) call("handleNavigate", d.id);
     });
     // touch screens have no hover: a tap opens the card and the highlight does not stick
-    nodeSel.on("pointerenter", (e, d) => { if (!dragging && e.pointerType !== "touch") setHover(d.id, false); })
-      .on("pointerleave", (e) => { if (!dragging && e.pointerType !== "touch") setHover(null, false); });
+    nodeSel.on("pointerenter", (e, d) => { if (!dragging && e.pointerType !== "touch") hoverSoon(d.id); })
+      .on("pointerleave", (e) => { if (!dragging && e.pointerType !== "touch") hoverSoon(null); });
 
     buildSimulation();
     settle(!first);
@@ -1020,14 +1022,54 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         .text((l) => l);
     });
     nebLabelSel
-      .on("pointerenter", (e, x) => { hoverCluster = x.c.id; restyle(); })
-      .on("pointerleave", () => { hoverCluster = null; restyle(); })
+      .on("pointerenter", (e, x) => { clusterHoverSoon(x.c.id); })
+      .on("pointerleave", () => { clusterHoverSoon(null); })
       // a click on the name brings the constellation closer
-      .on("click", (event, x) => { event.stopPropagation(); fit(500, false, undefined, x.members); });
+      .on("click", (event, x) => { event.stopPropagation(); pinCluster(x.c.id); });
+    // drag by the name: the whole constellation moves with it (members are held like a dragged node)
+    nebLabelSel.call(d3.drag()
+      .on("start", (event, x) => {
+        stopTween();
+        dragging = true;
+        x.grab = { x: event.x, y: event.y, from: x.members.map((d) => [d, d.x, d.y]) };
+        for (const [d] of x.grab.from) { d.fx = d.x; d.fy = d.y; }
+        if (options.motion !== "still" && !event.active) sim.alphaTarget(0.18).restart();
+      })
+      .on("drag", (event, x) => {
+        const dx = event.x - x.grab.x, dy = event.y - x.grab.y;
+        for (const [d, x0, y0] of x.grab.from) {
+          d.fx = x0 + dx; d.fy = y0 + dy;
+          if (options.motion === "still") { d.x = d.fx; d.y = d.fy; }
+        }
+        if (options.motion === "still") place();
+      })
+      .on("end", (event, x) => {
+        dragging = false;
+        for (const [d] of x.grab.from) {
+          if (options.motion === "still") { d.x = d.fx; d.y = d.fy; }
+          d.fx = null; d.fy = null;
+        }
+        x.grab = null;
+        if (options.motion !== "still" && !event.active) startMotion(0);
+        scheduleSave(1200, true);
+      }));
+    // a click on the cloud itself does the same (the layer does not catch the pointer, the circles do)
+    nebSel.on("click", (event, x) => { event.stopPropagation(); pinCluster(x.c.id); });
     styleNebulae();
     placeNebulae();
     cullNebLabels();
   }
+  function pinCluster(id) {
+    pinnedCluster = pinnedCluster === id ? null : id;
+    if (pinnedCluster) closeCard();
+    restyle();
+  }
+  let clusterHoverTimer = 0;
+  function clusterHoverSoon(id) {
+    clearTimeout(clusterHoverTimer);
+    clusterHoverTimer = setTimeout(() => { if (hoverCluster !== id) { hoverCluster = id; restyle(); } }, id ? 60 : 140);
+  }
+  cleanup.push(() => clearTimeout(clusterHoverTimer));
   function styleNebulae() {
     if (!nebLayer) return;
     const soft = options.nebulaSoft;
@@ -1037,12 +1079,12 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const r = nebRadius();
     nebLayer.selectAll("g.cn-neb").style("fill", (x) => clusterColor(x.c))
       .style("fill-opacity", options.nebulaOpacity / 100 * 0.5)
-      .style("opacity", (x) => (hoverCluster ? (hoverCluster === x.c.id ? 1 : 0.2) : 1))
+      .style("opacity", (x) => (activeCluster() ? (activeCluster() === x.c.id ? 1 : 0.2) : 1))
       .selectAll("circle").attr("r", r);
     if (nebLabelSel) {
       nebLabelSel.style("fill", (x) => clusterColor(x.c, true))
         .style("font-size", (x) => Math.min(40, 15 + Math.sqrt(x.members.length) * 4) + "px")
-        .style("opacity", (x) => (hoverCluster ? (hoverCluster === x.c.id ? 0.95 : 0.15) : 0.55 * Math.min(1, 0.4 + options.nebulaOpacity / 60)));
+        .style("opacity", (x) => (activeCluster() ? (activeCluster() === x.c.id ? 0.95 : 0.15) : 0.55 * Math.min(1, 0.4 + options.nebulaOpacity / 60)));
     }
   }
   // Names of constellations push each other apart like nodes do: overlapping names slide away (a soft spring
@@ -1096,7 +1138,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const kept = [];
     for (const p of items) {
       const hit = kept.some((q) => { const [dx, dy] = overlap(p, q); return dx > 2 && dy > 2; });
-      const keep = !hit || hoverCluster === p.x.c.id;
+      const keep = !hit || activeCluster() === p.x.c.id;
       p.el.style.display = keep ? "" : "none";
       if (keep) kept.push(p);
       nebOffsets.set(p.x.c.id, { x: p.ox, y: p.oy });
@@ -1219,12 +1261,25 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     budget = Math.max(6, Math.round(20 * currentScale * currentScale * viewArea / (1000 * 700)));
   }
 
+  let prevHovered = null;
   function setHover(id, fromCard) {
+    clearTimeout(hoverTimer);
+    if (id === hovered && !!(id && fromCard) === cardHover) return;
+    prevHovered = hovered;
     hovered = id;
     cardHover = !!(id && fromCard);
-    restyle();
+    restyle(true);                      // only what hover changes — not nebulae, rays, gradients
     if (cardHover) place();
   }
+  // Hover with intent: a pointer flying across the graph must not make everything dim, relabel and blink.
+  // A node is taken after a short stay on it; leaving waits a bit, so moving to the next node switches directly.
+  let hoverTimer = 0;
+  function hoverSoon(id) {
+    clearTimeout(hoverTimer);
+    if (id === hovered && !cardHover) return;
+    hoverTimer = setTimeout(() => { if (!dragging) setHover(id, false); }, id ? 60 : 140);
+  }
+  cleanup.push(() => clearTimeout(hoverTimer));
 
   // Labels must not overlap: going from the most important (open, selected, hovered and its neighbours, search
   // hits, then by link count), a label whose box overlaps an already placed one is hidden. Boxes are in graph
@@ -1348,11 +1403,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return ray(long, 0) + ray(long, Math.PI / 2) + ray(short, Math.PI / 4) + ray(short, -Math.PI / 4);
   }
 
-  function restyle() {
+  function restyle(light) {
     if (!nodeSel) return;
     updateBudget();
     const f = (options.hoverFocus ? hovered : null) || selected;
-    const cl = !f && hoverCluster ? clusterById.get(hoverCluster) : null;
+    const cl = !f && activeCluster() ? clusterById.get(activeCluster()) : null;
     const focus = f ? new Set([f, ...(adjacency.get(f) || [])]) : cl ? new Set(cl.members) : null;
     const touches = (l) => f && (l.source.id === f || l.target.id === f);
     const base = options.labelOpacity / 100;
@@ -1360,14 +1415,15 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const fontSize = 10.5 * options.labelSize / 100 * Math.min(1.6, Math.max(1, 0.85 / currentScale));
     cullLabels(fontSize);
 
-    nodeSel.select("circle.cn-alert")
+    const marked = nodeSel.filter((d) => d.overdue || d.soon != null);   // few nodes: the rest have no marks
+    marked.select("circle.cn-alert")
       .attr("r", (d) => radius(d) + (d.id === hovered ? 2 : 0) + 3.5)
       .style("display", (d) => (options.marks && d.overdue ? null : "none"))
       .style("opacity", (d) => (search ? (matches(d) ? 1 : 0.2) : focus ? (focus.has(d.id) ? 1 : 0.2) : 1));
     // “in N days” on a page marked through its event — only if the event page itself is not shown (no double label)
     const shownIds = new Set(shown.map((n) => n.id));
     const soonShown = (d) => d.soon != null && !(d.soonVia && shownIds.has(d.soonVia));
-    nodeSel.select("text.cn-soon")
+    marked.select("text.cn-soon")
       .attr("y", (d) => -radius(d) - 5)
       .style("display", (d) => (options.marks && soonShown(d) ? null : "none"))
       .style("font-size", fontSize * 0.92 + "px")
@@ -1384,17 +1440,18 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     nodeSel.select("circle.cn-dot")
       // a star is a bigger circle whose gradient fades out: the white core is as big as the dot would be
       .attr("r", (d) => (stars ? starSize(radius(d)) * glow : radius(d)) + (d.id === hovered ? 2 : 0))
-      .style("fill", (d) => (stars ? `url(#${starGradient(colorOf(d))})` : colorOf(d)))
+      .style("fill", light ? null : (d) => (stars ? `url(#${starGradient(colorOf(d))})` : colorOf(d)))
       .style("opacity", dotOpacity)
       .style("stroke", (d) => (ringed(d) ? palette.ring : stars ? "none" : palette.bg))
       .style("stroke-width", (d) => (d.isCurrent || d.id === selected || (d.id === hovered && cardHover) ? 3 : 1.5) * (stars ? 0.6 : 1))
       .style("stroke-opacity", stars ? 0.7 : null);
-    nodeSel.select("path.cn-rays")
+    // rays: shape, angle and color change only with settings; hover touches just the two nodes involved
+    (light ? nodeSel.filter((d) => d.id === hovered || d.id === prevHovered) : nodeSel).select("path.cn-rays")
       .style("display", stars && options.starRays > 0 ? null : "none")
       .attr("d", (d) => (stars ? rayPath(starSize(radius(d)) + (d.id === hovered ? 2 : 0)) : null))
       .attr("transform", (d) => `rotate(${(hash01(d.id + "/") * 90 - 45).toFixed(1)})`)
-      .style("fill", (d) => starRayColor(colorOf(d)))
-      .style("opacity", (d) => dotOpacity(d) * 0.9);
+      .style("fill", (d) => starRayColor(colorOf(d)));
+    if (stars) nodeSel.select("path.cn-rays").style("opacity", (d) => dotOpacity(d) * 0.9);
     nodeSel.select("text.cn-label")
       .attr("y", (d) => radius(d) + (d.id === hovered ? 2 : 0) + 1)
       .style("font-size", (d) => (d.isCurrent || d.id === selected || d.id === hovered ? fontSize * 1.15 : fontSize) + "px")
@@ -1417,6 +1474,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         if (cl) return focus.has(l.source.id) && focus.has(l.target.id) ? 0.8 : 0.12;
         return focus ? 0.12 : 0.6 * options.linkOpacity / 100;
       });
+    if (light) {
+      pulse.classed("on", !!(hovered && cardHover && shown.some((n) => n.id === hovered)))
+        .style("stroke", hovered ? colorOf(nodeById.get(hovered) || { group: "other" }) : null);
+      return;
+    }
     // twinkling glow of the stars: only where it is not heavy
     const twinkling = options.twinkle && options.motion !== "still" && shown.length <= 300;
     svg.classed("cn-twinkle", twinkling);
@@ -1529,6 +1591,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   }
 
   async function openCard(id) {
+    pinnedCluster = null;
     const n = nodeById.get(id);
     if (!n) return;
     const wasOpen = card.classList.contains("open");
