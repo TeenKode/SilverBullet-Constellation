@@ -231,6 +231,18 @@ async function main() {
     await fr.evaluate(() => document.querySelector(".cn-icon[data-act=close]").click());
     if (shots) await page.screenshot({ path: join(shots, "nebulae.png") });
 
+    // right click hides a page (also out of the constellations); the note undoes it
+    const nodeCount = () => fr.evaluate(() => document.querySelectorAll(".cn-node:not(.cn-leaving)").length);
+    const before2 = await nodeCount();
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-node")].find((n) => n.querySelector("title").textContent === "Ideas/Seeds")
+      .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    await page.waitForTimeout(900);
+    const names = () => fr.evaluate(() => [...document.querySelectorAll(".cn-node:not(.cn-leaving) title")].map((t) => t.textContent));
+    check("right click hides a page", !(await names()).includes("Ideas/Seeds") && (await nodeCount()) === before2 - 1);
+    await fr.locator(".cn-hide-toast button").click();
+    await page.waitForTimeout(900);
+    check("… and the note brings it back", (await names()).includes("Ideas/Seeds"));
+
     // card, own checkboxes in a CRLF page
     const fair = join(space, "Projects", "Autumn Fair.md");
     let text = await openCard(page, fr, "Projects/Autumn Fair");

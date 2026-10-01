@@ -518,3 +518,14 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
 .cn-twinkle .cn-rays { animation: cn-rays var(--d, 4s) ease-in-out var(--dl, 0s) infinite; }
 @keyframes cn-rays { 0%, 100% { fill-opacity: 0.9; } 24% { fill-opacity: var(--lo, 0.4); } 41% { fill-opacity: 0.8; } 73% { fill-opacity: calc(var(--lo, 0.4) + 0.2); } }
 @media (prefers-reduced-motion: reduce) { .cn-twinkle .cn-rays { animation: none; } }
+
+/* hidden pages: undo note and the list in the settings */
+.cn-hide-toast {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 20;
+  display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; border-radius: 10px;
+  background: var(--cn-card-bg); color: var(--cn-card-text); border: 1px solid var(--cn-card-border);
+  box-shadow: var(--cn-card-shadow); font-size: 12.5px; max-width: 80%;
+}
+.cn-hide-toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cn-hidden-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 2px 0; }
+.cn-hidden-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
