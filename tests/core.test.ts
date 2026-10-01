@@ -150,3 +150,16 @@ test("upcoming marks can be switched off", () => {
     normalizeConfig({ upcoming: false }), "en", "2026-09-28");
   assert.equal(data.nodes[0].soon, null);
 });
+
+test("noConstellations: the page stays in the graph and is marked", () => {
+  const cfg = normalizeConfig({ noConstellations: ["Similar topics", "Index/"] });
+  const data = buildGraphData("A", {
+    pages: [{ name: "A" }, { name: "Similar topics" }, { name: "Index/All" }],
+    links: [{ page: "Similar topics", toPage: "A" }, { page: "Index/All", toPage: "A" }],
+    tasks: [],
+  }, cfg, "en", "2026-09-28");
+  const byId = new Map(data.nodes.map((n) => [n.id, n]));
+  assert.equal(byId.get("Similar topics")?.noCluster, true);
+  assert.equal(byId.get("Index/All")?.noCluster, true);
+  assert.equal(byId.get("A")?.noCluster, false);
+});

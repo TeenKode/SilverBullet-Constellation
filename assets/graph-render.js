@@ -54,6 +54,7 @@
     similarity: 40,           // strictness: the bigger, the less similar pages join one constellation
     clusterSize: 50,          // size: few big constellations (0) … many small ones (100)
     clusterPull: 25,          // how strongly the pages of a constellation gather, 0–100
+    hubs: true,               // pages that glue several topics (a “similar topics” index) stay out of constellations
     simLinks: false,          // thin dashed threads between pages similar by text
     // stars: nodes drawn as real stars — a white-hot core, a glow of the group color and diffraction rays
     nodeStyle: "dots",        // dots — flat circles; stars — glowing stars
@@ -66,13 +67,14 @@
   const SETTING_KEYS = ["motion", "repel", "linkDistance", "nodeSize", "linkWidth", "labels", "labelOpacity", "labelSize",
     "colors", "freshBright", "marks", "gravity", "nodeSizeBy", "linkOpacity", "hoverFocus", "nearDepth", "starfield", "twinkle",
     "nebulae", "nebulaOpacity", "nebulaSoft", "nebulaColor", "nebulaLabels", "nebulaMin", "textWeight", "similarity",
-    "clusterSize", "clusterPull", "simLinks", "nodeStyle", "starGlow", "starRays", "starCore", "starBright", "font"];
+    "clusterSize", "clusterPull", "hubs", "simLinks", "nodeStyle", "starGlow", "starRays", "starCore", "starBright", "font"];
 
   const LANG = window.__CN_LANG__ === "ru" ? "ru" : "en";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const I18N = {
     en: {
-      title: "Graph", all: ["All", "Show all pages and links"], near: ["Nearby", "Only pages within two steps of the selected one"],
+      title: "Graph", all: ["All", "Show all pages and links"], near: ["Nearby", "Only pages a few steps (see the options) from the selected one"],
+      pickPage: "Nearby shows the surroundings of a page: click a node first",
       orphans: ["Orphans", "Show pages without links"], search: "Search…", fit: "Fit the graph to the window",
       settings: "Graph settings", closeGraph: "Close the graph (Esc)", timeline: "Timeline: which pages to show",
       since: (d) => `since ${d}`, allTime: "All time", allTimeHint: "Click to show all time", show: "Show", hide: "Hide",
@@ -121,11 +123,14 @@
       similarity: "Strictness", similarityHint: "The bigger, the less similar pages join one constellation",
       clusterSize: "Constellation size", clusterSizeHint: "Left — few big ones, right — many small ones",
       clusterPull: "Gathering", clusterPullHint: "How strongly the pages of one constellation pull together",
+      hubs: ["Hubs stay out", "A page that glues several topics (an index of similar topics) neither forms a constellation nor names it; it stays on the graph"],
+      hubsFound: (l) => `Hubs left out: ${l}`,
       simLinks: ["Similarity threads", "Thin dashed lines between pages similar by text, even without a link"],
       pages: (n) => `${n} pages`, nebulaCount: (n) => `Constellations: ${n}`, nebulaWait: "Counting similarity of texts…",
     },
     ru: {
-      title: "Граф связей", all: ["Вся база", "Показать все страницы и связи"], near: ["Рядом", "Только страницы в двух шагах от выбранной"],
+      title: "Граф связей", all: ["Вся база", "Показать все страницы и связи"], near: ["Рядом", "Только страницы в нескольких шагах (число — в параметрах) от выбранной"],
+      pickPage: "«Рядом» показывает окружение страницы: сначала нажмите на узел",
       orphans: ["Без связей", "Показать страницы без ссылок"], search: "Поиск…", fit: "Вписать граф в окно",
       settings: "Настройки графа", closeGraph: "Закрыть граф (Esc)", timeline: "Лента времени: какие страницы показывать",
       since: (d) => `с ${d}`, allTime: "Всё время", allTimeHint: "Нажмите — показать всё время", show: "Показать", hide: "Скрыть",
@@ -174,6 +179,8 @@
       similarity: "Строгость", similarityHint: "Чем выше, тем меньше похожих страниц попадает в одно созвездие",
       clusterSize: "Размер созвездий", clusterSizeHint: "Влево — мало крупных, вправо — много мелких",
       clusterPull: "Стягивание", clusterPullHint: "Как сильно страницы одного созвездия тянутся друг к другу",
+      hubs: ["Хабы вне созвездий", "Страница, которая склеивает несколько тем (список похожих тем), не образует созвездие и не даёт ему название; на графе остаётся"],
+      hubsFound: (l) => `Хабы вне созвездий: ${l}`,
       simLinks: ["Нити схожести", "Тонкие пунктирные линии между страницами, похожими по тексту, даже без ссылки"],
       pages: (n) => `${n} стр.`, nebulaCount: (n) => `Созвездий: ${n}`, nebulaWait: "Считаю схожесть текстов…",
     },
@@ -297,20 +304,21 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   let clusterOf = new Map();         // page → constellation id
   let clusters = [];                 // [{id, members, name, size}]
   let clusterById = new Map();
+  let hubPages = [];                 // found automatically: they glue several topics
   let hoverCluster = null;
   let pinnedCluster = null;   // a nebula chosen by click: the rest stays dimmed until the click on empty space
   const activeCluster = () => pinnedCluster || hoverCluster;
   function recluster() {
     clusterOf = new Map(); clusters = []; clusterById = new Map();
     if (!options.nebulae || !window.CNCluster) return;
-    const skip = new Set(all.nodes.filter((n) => n.periodic || options.hiddenNodes.includes(n.id)).map((n) => n.id));
+    const skip = new Set(all.nodes.filter((n) => n.periodic || n.noCluster || options.hiddenNodes.includes(n.id) || options.hidden.includes(n.group)).map((n) => n.id));
     const r = window.CNCluster.detect({
       ids: all.nodes.map((n) => n.id), links: all.edges.map((e) => [e.source, e.target]), sims: simData, skip,
       textWeight: options.textWeight / 100, similarity: options.similarity / 100,
-      resolution: 0.3 + 1.7 * options.clusterSize / 100, minSize: options.nebulaMin,
+      resolution: 0.3 + 1.7 * options.clusterSize / 100, minSize: options.nebulaMin, hubs: options.hubs,
       label: (id) => (nodeById.get(id) || { label: id }).label, rank: (id) => degree(id),
     });
-    clusterOf = r.of; clusters = r.clusters;
+    clusterOf = r.of; clusters = r.clusters; hubPages = r.hubs || [];
     for (const c of clusters) clusterById.set(c.id, c);
     // hues go round the color wheel by the golden angle: neighbours by name never get almost the same color
     clusterHue = new Map(clusters.map((c) => c.id).sort().map((id, i) => [id, Math.round((i * 137.508 + 25) % 360)]));
@@ -352,6 +360,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return force;
   }
   recluster();
+  window.__CN_HUBS__ = () => hubPages.slice();
   window.__CN_CLUSTERS__ = () => clusters.map((c) => ({ id: c.id, name: c.name, members: c.members.slice() }));   // for the checks
 
   // Radius — by links in the whole space, not in the visible part: filters do not resize nodes
@@ -528,6 +537,18 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     options.mode = mode;
     saveOption("mode", mode);
     refresh(true);
+    nearHint();
+  }
+  // “Nearby” needs a page to be near to: in the full view that is the one opened in the card
+  function nearHint() {
+    if (options.mode !== "near" || focusId()) return;
+    if (hideToast) hideToast.remove();
+    clearTimeout(hideToastTimer);
+    hideToast = document.createElement("div");
+    hideToast.className = "cn-hide-toast";
+    hideToast.innerHTML = `<span>${esc(T.pickPage)}</span>`;
+    container.appendChild(hideToast);
+    hideToastTimer = setTimeout(() => { if (hideToast) hideToast.remove(); hideToast = null; }, 5000);
   }
 
   // Legend: group chips (redrawn) and the timeline (built once — the slider is not reset under the pointer)
@@ -590,6 +611,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         options.hidden = off ? options.hidden.filter((x) => x !== g.id) : options.hidden.concat([g.id]);
         saveOption("hidden", options.hidden);
         refresh(false);
+        applyClusters(false);          // pages of a hidden group (service pages) take no part in constellations
       });
       chipsBox.appendChild(chip);
     }
@@ -704,6 +726,24 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const floating = () => options.motion === "float" && shown.length <= 500;
   const offX = (d) => (floating() ? FLOAT_AMP * Math.sin(floatT * (0.55 + d.freq) + d.phase) : 0);
   const offY = (d) => (floating() ? FLOAT_AMP * Math.cos(floatT * (0.45 + d.freq * 0.8) + d.phase * 1.7) : 0);
+  let twinkleJs = false, twinkleItems = null;
+  // per star: its own period, phase and depth (the same hashes as the CSS animation would take), two waves of different
+  // frequency make the blinking irregular
+  function twinkleStep(t) {
+    if (!twinkleItems) {
+      twinkleItems = [];
+      nodeSel.each(function (d) {
+        twinkleItems.push({ ray: this.querySelector(".cn-rays"), halo: this.querySelector(".cn-halo"),
+          per: parseFloat(twinkleTime(d.id + "*")), ph: hash01(d.id + "~") * 40, lo: 0.1 + hash01(d.id + "%") * 0.4 });
+      });
+    }
+    for (const it of twinkleItems) {
+      const a = 2 * Math.PI * (t + it.ph) / it.per;
+      const w = 0.5 + 0.5 * (Math.sin(a) + 0.5 * Math.sin(2.3 * a + 1)) / 1.5;      // 0..1
+      if (it.ray) it.ray.style.fillOpacity = (0.9 - (0.9 - it.lo) * w).toFixed(2);
+      if (it.halo) it.halo.style.opacity = (0.4 * w).toFixed(2);
+    }
+  }
   let rafId = 0, lastFrame = 0;
   function floatLoop(now) {
     rafId = 0;
@@ -712,6 +752,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       lastFrame = now;
       floatT = now / 1000;
       if (!dragging) place(true);
+      if (twinkleJs) twinkleStep(floatT);
     }
     rafId = requestAnimationFrame(floatLoop);
   }
@@ -995,6 +1036,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         (up) => up.classed("cn-leaving", false),
         (ex) => ex.call(leave))
       .order();
+    twinkleItems = null;
     place();
     drawNebulae();
     drawSims();
@@ -1106,7 +1148,10 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .on("start", (event, x) => {
         stopTween();
         dragging = true;
+        clearTimeout(clusterHoverTimer);
         clusterGrab = { x0: event.x, y0: event.y, dx: 0, dy: 0, from: x.members.map((d) => [d, d.x, d.y]) };
+        hoverCluster = x.c.id;
+        restyle(true); styleNebulae(); cullNebLabels();
         if (options.motion !== "still" && !event.active) sim.alphaTarget(0.18).restart();
       })
       .on("drag", (event) => {
@@ -1120,6 +1165,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .on("end", () => {
         dragging = false;
         clusterGrab = null;
+        hoverCluster = null;
+        restyle(true); styleNebulae(); cullNebLabels();
         if (options.motion !== "still") startMotion(0);
         scheduleSave(1200, true);
       }));
@@ -1157,6 +1204,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   let clusterHoverTimer = 0;
   function clusterHoverSoon(id) {
     clearTimeout(clusterHoverTimer);
+    if (clusterGrab) return;               // a constellation is being dragged: it stays the highlighted one
     clusterHoverTimer = setTimeout(() => {
       if (hoverCluster === id) return;
       hoverCluster = id;
@@ -1308,12 +1356,26 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const el = settingsPanel && settingsPanel.querySelector(".cn-cluster-info");
     if (!el) return;
     el.textContent = simLoaded && !simReady ? T.nebulaWait : T.nebulaCount(clusters.length);
+    if (hubPages.length && !(simLoaded && !simReady)) {
+      el.textContent += ". " + T.hubsFound(hubPages.map((id) => (nodeById.get(id) || { label: id }).label).join(", "));
+    }
   }
+
+  // The nebula filter (noise + blur) is recomputed at each move of a circle: while the physics runs (60 ticks a second)
+  // the clouds follow at most 10 times a second, and once more when the physics is calm
+  let nebAt = 0, nebTimer = 0;
+  function placeNebulaeSoon() {
+    const now = performance.now();
+    clearTimeout(nebTimer);
+    if (now - nebAt > 100) { nebAt = now; placeNebulae(); return; }
+    nebTimer = setTimeout(() => { nebAt = performance.now(); placeNebulae(); }, 110);
+  }
+  cleanup.push(() => clearTimeout(nebTimer));
 
   function place(fromFloat) {
     if (!linkSel) return;
     // nebulae and constellation names ignore the ±3.5 px drift: they are soft anyway, and re-blurring 30 times a second is costly
-    if (!fromFloat) placeNebulae();
+    if (!fromFloat) placeNebulaeSoon();
     if (simSel) simSel.attr("x1", (d) => px(d.source)).attr("y1", (d) => py(d.source)).attr("x2", (d) => px(d.target)).attr("y2", (d) => py(d.target));
     linkSel.attr("x1", (d) => px(d.source)).attr("y1", (d) => py(d.source))
       .attr("x2", (d) => px(d.target)).attr("y2", (d) => py(d.target));
@@ -1591,7 +1653,15 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     }
     // twinkling glow of the stars: only where it is not heavy
     const twinkling = options.twinkle && options.motion !== "still" && shown.length <= 300;
-    svg.classed("cn-twinkle", twinkling);
+    // while the nodes drift, the twinkle is written in the same frame as their moves (one repaint instead of two
+    // independent ones: CSS animations running beside the drift made the picture crawl); otherwise — CSS animation
+    twinkleJs = twinkling && floating();
+    svg.classed("cn-twinkle", twinkling && !twinkleJs);
+    svg.classed("cn-twinkling", twinkling);
+    if (!twinkleJs && twinkleItems) {
+      for (const it of twinkleItems) { if (it.ray) it.ray.style.fillOpacity = ""; if (it.halo) it.halo.style.opacity = ""; }
+      twinkleItems = null;
+    }
     nodeSel.select("circle.cn-halo")
       .attr("r", (d) => radius(d) + 5)
       .style("fill", (d) => colorOf(d))
@@ -2078,6 +2148,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       sky.appendChild(slider(T.clusterSize, "clusterSize", 0, 100, 5, " %", applyClustersSoon, T.clusterSizeHint));
       sky.appendChild(slider(T.nebulaMin, "nebulaMin", 2, 10, 1, "", applyClustersSoon));
       sky.appendChild(slider(T.clusterPull, "clusterPull", 0, 100, 5, " %", applyForces, T.clusterPullHint));
+      sky.appendChild(checkbox(T.hubs[0], "hubs", T.hubs[1], () => applyClusters(true)));
       sky.appendChild(checkbox(T.simLinks[0], "simLinks", T.simLinks[1], drawSims));
       updateClusterInfo();
     }
@@ -2139,7 +2210,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const other = section(T.other);
     other.appendChild(checkbox(T.fresh[0], "freshBright", T.fresh[1], () => restyle()));
     other.appendChild(checkbox(T.marks[0], "marks", T.marks[1], () => restyle()));
-    other.appendChild(segmented(T.nearDepth, "nearDepth", [[1, "1", ""], [2, "2", ""], [3, "3", ""]], () => refresh(true)));
+    other.appendChild(segmented(T.nearDepth, "nearDepth", [[1, "1", ""], [2, "2", ""], [3, "3", ""]], () => { refresh(true); nearHint(); }));
     other.appendChild(checkbox(T.start[0], "startWithGraph", T.start[1]));
     const hid = document.createElement("div");
     hid.className = "cn-hidden-list";

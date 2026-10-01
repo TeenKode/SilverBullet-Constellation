@@ -173,7 +173,7 @@ async function main() {
       clusters.some((c) => garden.every((id) => c.members.includes(id))), clusters.map((c) => `${c.name}(${c.members.length})`).join(", "));
     check("day summaries are not in constellations", !clusters.some((c) => c.members.some((id) => /\d{4}-\d{2}-\d{2}$/.test(id))));
     check("starry background and twinkling", await fr.evaluate(() => document.querySelector("#cn-container").classList.contains("cn-starfield")
-      && document.querySelector("svg:not(.cn-neb-svg)").classList.contains("cn-twinkle")));
+      && document.querySelector("svg:not(.cn-neb-svg)").classList.contains("cn-twinkling")));
     // settings: nebulae off and on again
     await fr.evaluate(() => document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click());
     await page.waitForTimeout(500);
@@ -252,6 +252,23 @@ async function main() {
     check("click on a constellation: zoom to it and dim the rest", (await tf()) !== t0 && dim > 0, `dimmed ${dim}, ${t0} -> ${await tf()}`);
     await fr.evaluate(() => document.querySelector(".cn-neb-label").dispatchEvent(new MouseEvent("click", { bubbles: true })));
     await page.waitForTimeout(700);
+
+    // “Nearby”: the page opened in the card and the steps around it
+    const shownCount = () => fr.evaluate(() => document.querySelectorAll(".cn-node:not(.cn-leaving)").length);
+    const wholeCount = await shownCount();
+    await openCard(page, fr, "People/Ann");
+    await fr.evaluate(() => [...document.querySelectorAll("#cn-toolbar button")].find((b) => /^(Nearby|Рядом)$/.test(b.textContent.trim())).click());
+    await page.waitForTimeout(1200);
+    const near2 = await shownCount();
+    await fr.evaluate(() => document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click());
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-set-row")].find((r) => /Nearby|Рядом/.test(r.textContent)).querySelectorAll("button")[0].click());
+    await page.waitForTimeout(1200);
+    const near1 = await shownCount();
+    check("nearby: fewer pages, and fewer with 1 step than with 2", near2 < wholeCount && near1 < near2, `${wholeCount} / 2 steps ${near2} / 1 step ${near1}`);
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-set-row")].find((r) => /Nearby|Рядом/.test(r.textContent)).querySelectorAll("button")[1].click());
+    await fr.evaluate(() => [...document.querySelectorAll("#cn-toolbar button")].find((b) => /^(All|Вся база)$/.test(b.textContent.trim())).click());
+    await page.waitForTimeout(1200);
+    await fr.evaluate(() => document.querySelector(".cn-icon[data-act=close]")?.click());
 
     // right click hides a page (also out of the constellations); the note undoes it
     const nodeCount = () => fr.evaluate(() => document.querySelectorAll(".cn-node:not(.cn-leaving)").length);

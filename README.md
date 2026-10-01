@@ -113,6 +113,7 @@ config.set("constellation", {
 | `dueAttributes` | `{"due", "deadline"}` | task attributes holding a due date (`YYYY-MM-DD`) for the overdue ring |
 | `upcoming` | `{attribute = "date", days = 14}` | pages whose `attribute` date is within `days` get “in N days”. `prefix` limits the mark to a folder; `mirror` also marks the page with the same name under another prefix (an event's project). Use `false` to switch it off. |
 | `exclude` | — | more pages to hide: `"Folder/"` prefixes or exact names. `Library/`, `Repositories/`, `_…`, `CONFIG`, `PLUGS`, `SETTINGS` and `SECRETS` are always hidden. |
+| `noConstellations` | — | pages that stay on the graph but never belong to a constellation (an index of everything, a “similar topics” page): `"Folder/"` prefixes or exact names. Pages that glue several topics are also found automatically (⚙ → “Hubs stay out”). |
 | `similarity` | `true` | read page texts to find pages about the same thing (constellations). `false` — links only; texts are never read. |
 | `similarityMaxPages` | `1500` | with more pages than this the texts are not read |
 | `extraCss` | `""` | extra CSS for the graph panel, for example styles of your own widgets shown in the card |

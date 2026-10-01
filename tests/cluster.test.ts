@@ -38,3 +38,24 @@ test("minimum size and stable result", () => {
   const a = detect({ ...input, minSize: 3 }), b = detect({ ...input, minSize: 3, ids: ids.slice().reverse() });
   assert.deepEqual(a.clusters.map((c: any) => c.id), b.clusters.map((c: any) => c.id));
 });
+
+test("a page that glues two topics is found, left out and does not give the name", () => {
+  const hubIds = [...ids.filter((x) => x !== "day" && x !== "lone"), "similar"];
+  const hubSims = sims.map((x) => x.slice());
+  for (const id of hubIds) if (id !== "similar") hubSims.push(["similar", id, 0.5]);
+  const hubLinks = hubIds.filter((x) => x !== "similar").map((x) => ["similar", x]);
+  const rank = (id: string) => (id === "similar" ? 8 : 1);
+  const input = { ids: hubIds, links: hubLinks, sims: hubSims, textWeight: 0.6, similarity: 0.3, minSize: 3, rank };
+  const r = detect(input);
+  assert.deepEqual(r.hubs, ["similar"]);
+  assert.equal(r.clusters.length, 2);
+  assert.ok(!r.of.has("similar"));
+  assert.ok(r.clusters.every((c: any) => c.id !== "similar"));
+  assert.deepEqual(detect({ ...input, hubs: false }).hubs, []);
+});
+
+test("a real center of one topic is not a hub", () => {
+  const star = ["c", "x1", "x2", "x3", "x4", "x5", "x6"];
+  const r = detect({ ids: star, links: star.slice(1).map((x) => ["c", x]), sims: [], textWeight: 0, minSize: 3, rank: (id: string) => (id === "c" ? 6 : 1) });
+  assert.deepEqual(r.hubs, []);
+});
