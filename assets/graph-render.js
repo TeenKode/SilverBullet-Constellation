@@ -720,6 +720,21 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   }
   cleanup.push(() => { if (rafId) cancelAnimationFrame(rafId); rafId = 0; });
 
+  // a dragged constellation: spring of every member to (its place at the grab + the move of the pointer)
+  let clusterGrab = null;
+  function clusterGrabForce() {
+    const force = () => {
+      const k = clusterGrab;
+      if (!k) return;
+      for (const [d, x0, y0] of k.from) {
+        d.vx += (x0 + k.dx - d.x) * 0.1;
+        d.vy += (y0 + k.dy - d.y) * 0.1;
+      }
+    };
+    force.initialize = () => {};
+    return force;
+  }
+
   let lastCull = 0;
   function buildSimulation() {
     if (sim) sim.stop();
@@ -735,6 +750,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     applyForceSet(sim, shownLinks, count, cx, cy, baseRadius)
       // the center of mass stays put: drifting and dragging do not move the whole graph
       .force("center", d3.forceCenter(cx, cy).strength(0.2))
+      .force("cgrab", clusterGrabForce())
       .on("tick", () => {
         place();
         // while nodes glide (constellations gather, settings change) labels are re-picked now and then —
@@ -816,6 +832,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       return;
     }
     sim.alphaTarget(0);
+    sim.alphaDecay(options.motion === "calm" ? 0.07 : 0.02);   // calm: after a nudge the graph settles at once, no long creeping
     if (alpha > sim.alpha()) sim.alpha(alpha);
     if (sim.alpha() > sim.alphaMin()) sim.restart();
     startFloat();
@@ -854,15 +871,20 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return lines.length ? lines : [text];
   }
 
-  let linkLayer, nodeLayer, nebLayer, nebTextLayer, simLayer, nebSel = null, nebLabelSel = null, simSel = null, shownSims = [];
+  let nebSvg, nebG, linkLayer, nodeLayer, nebLayer, nebTextLayer, simLayer, nebSel = null, nebLabelSel = null, simSel = null, shownSims = [];
   function ensureSvg() {
     if (svg) return false;
     container.innerHTML = "";
+    // nebulae live in their own <svg> under the graph: the blur/noise filter is heavy, and in one picture with
+    // twinkling stars and moving links it was recomputed on every repaint. Here it is repainted only when a nebula changes.
+    nebSvg = d3.select(container).append("svg").attr("class", "cn-neb-svg").attr("width", "100%").attr("height", "100%");
+    nebG = nebSvg.append("g");
     svg = d3.select(container).append("svg").attr("width", "100%").attr("height", "100%");
     g = svg.append("g");
     zoom = d3.zoom().scaleExtent([0.1, 6])
       .on("zoom", (event) => {
         g.attr("transform", event.transform);
+        nebG.attr("transform", event.transform);
         if (Math.abs(event.transform.k - currentScale) > 0.05) {
           currentScale = event.transform.k;
           restyle();
@@ -870,9 +892,16 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       })
       .on("end", () => saveView());
     svg.call(zoom).on("dblclick.zoom", null);
-    svg.on("click", (event) => { if (event.target === svg.node()) { pinnedCluster = null; closeCard(); restyle(); } });
+    // a click on empty space: on a nebula — its focus, elsewhere — everything off (the nebulae do not catch the pointer)
+    svg.on("click", (event) => {
+      if (event.target !== svg.node()) return;
+      const hit = nebulaAt(d3.pointer(event, g.node()));
+      if (hit) { pinCluster(hit.c.id); return; }
+      pinnedCluster = null; closeCard(); restyle();
+    });
     // nebulae: colored circles under the stars, blurred and “torn” by noise into a cloud
-    const defs = (svgDefs = svg.append("defs"));
+    svgDefs = svg.append("defs");
+    const defs = nebSvg.append("defs");
     const filter = defs.append("filter").attr("id", "cn-neb-filter").attr("x", "-40%").attr("y", "-40%")
       .attr("width", "180%").attr("height", "180%").attr("color-interpolation-filters", "sRGB");
     filter.append("feTurbulence").attr("type", "fractalNoise").attr("baseFrequency", 0.011).attr("numOctaves", 2)
@@ -880,7 +909,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     filter.append("feDisplacementMap").attr("class", "cn-neb-disp").attr("in", "SourceGraphic").attr("in2", "noise")
       .attr("scale", 40).attr("result", "torn");
     filter.append("feGaussianBlur").attr("class", "cn-neb-blur").attr("in", "torn").attr("stdDeviation", 20);
-    nebLayer = g.append("g").attr("class", "cn-nebulae").attr("filter", "url(#cn-neb-filter)");
+    nebLayer = nebG.append("g").attr("class", "cn-nebulae").attr("filter", "url(#cn-neb-filter)");
     simLayer = g.append("g").attr("class", "cn-sims");
     linkLayer = g.append("g").attr("class", "cn-links");
     nebTextLayer = g.append("g").attr("class", "cn-neb-labels");
@@ -1070,56 +1099,85 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .on("pointerleave", () => { clusterHoverSoon(null); })
       // a click on the name brings the constellation closer
       .on("click", (event, x) => { event.stopPropagation(); pinCluster(x.c.id); });
-    // drag by the name: the whole constellation moves with it (members are held like a dragged node)
+    // drag by the name: the constellation follows as a flock — every member is pulled to its place by a spring
+    // (physics still pushes them apart and holds the links), so the cloud stretches and catches up.
+    // Without physics ("still") the members move rigidly.
     nebLabelSel.call(d3.drag()
       .on("start", (event, x) => {
         stopTween();
         dragging = true;
-        x.grab = { x: event.x, y: event.y, from: x.members.map((d) => [d, d.x, d.y]) };
-        for (const [d] of x.grab.from) { d.fx = d.x; d.fy = d.y; }
+        clusterGrab = { x0: event.x, y0: event.y, dx: 0, dy: 0, from: x.members.map((d) => [d, d.x, d.y]) };
         if (options.motion !== "still" && !event.active) sim.alphaTarget(0.18).restart();
       })
-      .on("drag", (event, x) => {
-        const dx = event.x - x.grab.x, dy = event.y - x.grab.y;
-        for (const [d, x0, y0] of x.grab.from) {
-          d.fx = x0 + dx; d.fy = y0 + dy;
-          if (options.motion === "still") { d.x = d.fx; d.y = d.fy; }
+      .on("drag", (event) => {
+        const k = clusterGrab;
+        k.dx = event.x - k.x0; k.dy = event.y - k.y0;
+        if (options.motion === "still") {
+          for (const [d, x0, y0] of k.from) { d.x = x0 + k.dx; d.y = y0 + k.dy; }
+          place();
         }
-        if (options.motion === "still") place();
       })
-      .on("end", (event, x) => {
+      .on("end", () => {
         dragging = false;
-        for (const [d] of x.grab.from) {
-          if (options.motion === "still") { d.x = d.fx; d.y = d.fy; }
-          d.fx = null; d.fy = null;
-        }
-        x.grab = null;
-        if (options.motion !== "still" && !event.active) startMotion(0);
+        clusterGrab = null;
+        if (options.motion !== "still") startMotion(0);
         scheduleSave(1200, true);
       }));
-    // a click on the cloud itself does the same (the layer does not catch the pointer, the circles do)
-    nebSel.on("click", (event, x) => { event.stopPropagation(); pinCluster(x.c.id); });
     styleNebulae();
     placeNebulae();
     cullNebLabels();
   }
+  // the nebula under a point of the graph (the nearest center among those whose cloud covers it)
+  function nebulaAt([x, y]) {
+    if (!nebSel) return null;
+    const r = nebRadius();
+    let best = null, bestD = Infinity;
+    nebSel.each((c) => {
+      for (const m of c.members) {
+        const d = Math.hypot(m.x - x, m.y - y);
+        if (d < r && d < bestD) { bestD = d; best = c; }
+      }
+    });
+    return best;
+  }
+  // a chosen constellation is centered and zoomed to; chosen again — released
   function pinCluster(id) {
     pinnedCluster = pinnedCluster === id ? null : id;
-    if (pinnedCluster) closeCard();
-    restyle();
+    if (pinnedCluster) {
+      closeCard();
+      const c = clusterById.get(id);
+      const ids = new Set(c ? c.members : []);
+      const members = shown.filter((d) => ids.has(d.id));
+      if (members.length) fit(500, false, undefined, members);
+    }
+    restyle(true);
+    styleNebulae();
+    cullNebLabels();
   }
   let clusterHoverTimer = 0;
   function clusterHoverSoon(id) {
     clearTimeout(clusterHoverTimer);
-    clusterHoverTimer = setTimeout(() => { if (hoverCluster !== id) { hoverCluster = id; restyle(); } }, id ? 60 : 140);
+    clusterHoverTimer = setTimeout(() => {
+      if (hoverCluster === id) return;
+      hoverCluster = id;
+      restyle(true);               // not the full one: re-setting every star gradient made the nodes flash black
+      styleNebulae();
+      cullNebLabels();
+    }, id ? 60 : 140);
   }
   cleanup.push(() => clearTimeout(clusterHoverTimer));
+  let nebFilterKey = "";
   function styleNebulae() {
     if (!nebLayer) return;
     const soft = options.nebulaSoft;
     // no ragged edges on big graphs: the noise filter is heavy
-    svg.select(".cn-neb-disp").attr("scale", shown.length > 600 ? 0 : 8 + soft * 0.9);
-    svg.select(".cn-neb-blur").attr("stdDeviation", 4 + soft * 0.4);
+    // filter parameters only when they change: touching them re-runs the whole filter
+    const disp = shown.length > 600 ? 0 : 8 + soft * 0.9, blur = 4 + soft * 0.4;
+    if (nebFilterKey !== disp + "|" + blur) {
+      nebFilterKey = disp + "|" + blur;
+      nebSvg.select(".cn-neb-disp").attr("scale", disp);
+      nebSvg.select(".cn-neb-blur").attr("stdDeviation", blur);
+    }
     const r = nebRadius();
     nebLayer.selectAll("g.cn-neb").style("fill", (x) => clusterColor(x.c))
       .style("fill-opacity", options.nebulaOpacity / 100 * 0.5)
@@ -1487,10 +1545,12 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       return (d.isOrphan ? 0.5 : 1) * freshness(d);
     };
     const ringed = (d) => d.isCurrent || d.id === selected || matches(d) || (d.id === hovered && cardHover);
-    nodeSel.select("circle.cn-dot")
+    const dots = nodeSel.select("circle.cn-dot");
+    // the color does not depend on hover: a light restyle must not touch it (style("fill", null) would remove it — black nodes)
+    if (!light) dots.style("fill", (d) => (stars ? `url(#${starGradient(colorOf(d))})` : colorOf(d)));
+    dots
       // a star is a bigger circle whose gradient fades out: the white core is as big as the dot would be
       .attr("r", (d) => (stars ? starSize(radius(d)) * glow : radius(d)) + (d.id === hovered ? 2 : 0))
-      .style("fill", light ? null : (d) => (stars ? `url(#${starGradient(colorOf(d))})` : colorOf(d)))
       .style("opacity", dotOpacity)
       .style("stroke", (d) => (ringed(d) ? palette.ring : stars ? "none" : palette.bg))
       .style("stroke-width", (d) => (d.isCurrent || d.id === selected || (d.id === hovered && cardHover) ? 3 : 1.5) * (stars ? 0.6 : 1))

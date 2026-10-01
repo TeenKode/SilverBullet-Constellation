@@ -142,7 +142,9 @@ body {
   inset: 0;
   overflow: hidden;
 }
-#cn-container svg { display: block; }
+#cn-container svg { display: block; position: absolute; inset: 0; }
+/* the nebulae: a separate layer that the repaints of stars and links do not touch */
+#cn-container svg.cn-neb-svg { pointer-events: none; will-change: transform; }
 
 .cn-empty {
   display: flex;
@@ -484,7 +486,6 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
 
 /* ---- constellations: nebulae, names, threads of similarity, starry background, twinkling */
 .cn-nebulae, .cn-neb-labels, .cn-sims { pointer-events: none; }
-.cn-neb circle { pointer-events: all; cursor: pointer; }
 .cn-neb { transition: opacity 0.25s ease; }
 .cn-neb-label {
   font-weight: 600;
