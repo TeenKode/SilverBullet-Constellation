@@ -21,7 +21,7 @@ work**. You can tick off tasks without leaving the graph.
   group per top-level folder.
 - **A page card**: rendered content, `${…}` queries and widgets, linked pages, and an **Open page** button.
   **Task checkboxes write straight into the page**, including tasks shown by queries from other pages.
-- **Timeline**: a panel under the graph (button in the legend) — bars of pages by day, colored by group. Drag the frame to slide the period, its edges to resize it, or draw a new one; **Day / Week / Month / All** are one click away. Recent pages are brighter, older ones fade.
+- **Timeline**: a panel under the graph (button in the legend) — bars of pages by day, colored by group. Drag the frame to slide the period, its edges to resize it, or draw a new one; **Day / Week / Month / All** are one click away. **▶** plays the history: the frame moves a day per step (×1/×4/×16), and in **Growth** mode the graph grows up to the playhead. Pointing at a bar lights up the pages of that day. Recent pages are brighter, older ones fade.
 - **Marks**: a red ring on pages with overdue tasks, and “in N days” on upcoming events.
 - **Links from task attributes**: `[who: Ann]` can link the page to `People/Ann`, so people are not orphans.
 - **Constellations**: pages about the same thing gather and glow like nebulae, each with its own color and a name

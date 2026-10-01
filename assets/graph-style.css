@@ -546,3 +546,9 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
 .cn-tl-handle { fill: var(--cn-btn-active, #7c3aed); }
 .cn-tl-axis rect { fill: currentColor; opacity: 0.4; }
 .cn-tl-axis text { font-size: 9.5px; fill: currentColor; opacity: 0.65; }
+.cn-tl-head .cn-seg { display: inline-flex; }
+.cn-tl-head .cn-seg button { padding: 3px 9px; }
+.cn-tl-play { min-width: 34px; }
+.cn-tl-speed { min-width: 38px; }
+#cn-timeline.upto .cn-tl-presets button:not([data-days="0"]) { display: none; }
+.cn-tl-head-line { fill: var(--cn-btn-active, #7c3aed); }
