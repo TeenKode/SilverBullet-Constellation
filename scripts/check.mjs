@@ -327,7 +327,7 @@ async function main() {
     await fr.evaluate(() => [...document.querySelectorAll("#cn-timeline .cn-tl-presets button")].find((b) => b.dataset.days === "0").click());
     await page.waitForTimeout(1200);
     check("“All time” brings them back", Object.keys(await layout(fr)).length === Object.keys(beforeTime).length);
-    // growth mode: the playhead scrubs back (fewer pages), play brings the graph up to today
+    // “to a date” mode: a click on the bars shows the pages made up to that day
     const tlBox = await fr.evaluate(() => { const r = document.querySelector("#cn-timeline svg").getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; });
     const fbox = await (await fr.frameElement()).boundingBox();
     await fr.evaluate(() => document.querySelector('#cn-timeline [data-mode="upto"]').click());
@@ -335,12 +335,7 @@ async function main() {
     await page.mouse.click(fbox.x + tlBox[0] + tlBox[2] * 0.2, fbox.y + tlBox[1] + 20);
     await page.waitForTimeout(1200);
     const grown = await shownCount();
-    check("growth mode: the playhead hides newer pages", grown < wholeCount, `${grown} of ${wholeCount}`);
-    await fr.evaluate(() => document.querySelector(".cn-tl-speed").click());
-    await fr.evaluate(() => document.querySelector(".cn-tl-speed").click());
-    await fr.evaluate(() => document.querySelector(".cn-tl-play").click());
-    await page.waitForTimeout(5000);
-    check("play: the graph grows up to today", (await shownCount()) === wholeCount && (await fr.evaluate(() => document.querySelector(".cn-tl-play").textContent)) === "▶");
+    check("to-a-date mode: newer pages are hidden", grown < wholeCount, `${grown} of ${wholeCount}`);
     await fr.evaluate(() => document.querySelector('#cn-timeline [data-mode="window"]').click());
     await fr.evaluate(() => [...document.querySelectorAll("#cn-timeline .cn-tl-presets button")].find((b) => b.dataset.days === "0").click());
     await page.waitForTimeout(800);

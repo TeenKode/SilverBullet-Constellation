@@ -80,8 +80,8 @@
       pickPage: "Nearby shows the surroundings of a page: click a node first",
       orphans: ["Orphans", "Show pages without links"], search: "Search…", fit: "Fit the graph to the window",
       settings: "Graph settings", closeGraph: "Close the graph (Esc)", timeline: "Timeline: which pages to show",
-      since: (d) => `since ${d}`, tlRange: (a, b) => `${a} — ${b}`, tlDay: "Day", tlWeek: "Week", tlMonth: "Month", tlWindow: ["Frame", "Only pages inside the frame"], tlUpto: ["Growth", "Everything made up to the playhead: the graph grows"],
-      tlUptoText: (d) => `up to ${d}`, tlPlay: "Play", tlPause: "Pause", tlSpeed: "Speed",
+      since: (d) => `since ${d}`, tlRange: (a, b) => `${a} — ${b}`, tlDay: "Day", tlWeek: "Week", tlMonth: "Month", tlWindow: ["Frame", "Only pages inside the frame"], tlUpto: ["To a date", "Everything made up to the chosen date"],
+      tlUptoText: (d) => `up to ${d}`,
       tlHint: "Drag the frame to slide the period, its edges to resize; drag on empty space to draw a new one", allTime: "All time", allTimeHint: "Click to show all time", show: "Show", hide: "Hide",
       hiddenPages: "Hidden pages", hiddenHint: "Right-click a node to hide it", hiddenNone: "none", showAll: "Show all",
       pageHidden: (n) => `Hidden: ${n}`, undo: "Undo",
@@ -138,8 +138,8 @@
       pickPage: "«Рядом» показывает окружение страницы: сначала нажмите на узел",
       orphans: ["Без связей", "Показать страницы без ссылок"], search: "Поиск…", fit: "Вписать граф в окно",
       settings: "Настройки графа", closeGraph: "Закрыть граф (Esc)", timeline: "Лента времени: какие страницы показывать",
-      since: (d) => `с ${d}`, tlRange: (a, b) => `${a} — ${b}`, tlDay: "День", tlWeek: "Неделя", tlMonth: "Месяц", tlWindow: ["Рамка", "Только страницы внутри рамки"], tlUpto: ["Рост", "Всё, что появилось к выбранному моменту: граф растёт"],
-      tlUptoText: (d) => `до ${d}`, tlPlay: "Воспроизвести", tlPause: "Пауза", tlSpeed: "Скорость",
+      since: (d) => `с ${d}`, tlRange: (a, b) => `${a} — ${b}`, tlDay: "День", tlWeek: "Неделя", tlMonth: "Месяц", tlWindow: ["Рамка", "Только страницы внутри рамки"], tlUpto: ["На дату", "Всё, что появилось к выбранной дате"],
+      tlUptoText: (d) => `до ${d}`,
       tlHint: "Тяните рамку — сдвинете период, края — изменится длина; тяните по пустому месту — новый период", allTime: "Всё время", allTimeHint: "Нажмите — показать всё время", show: "Показать", hide: "Скрыть",
       hiddenPages: "Скрытые страницы", hiddenHint: "Правый клик по узлу — скрыть его", hiddenNone: "нет", showAll: "Показать все",
       pageHidden: (n) => `Скрыто: ${n}`, undo: "Отменить",
@@ -590,15 +590,13 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const caret = timeBox.querySelector(".cn-time-caret");
     tlPanel = document.createElement("div");
     tlPanel.id = "cn-timeline";
-    tlPanel.innerHTML = `<div class="cn-tl-head"><button class="cn-btn cn-tl-play"></button><button class="cn-btn cn-tl-speed"></button>` +
-      `<span class="cn-seg cn-tl-mode"></span><span class="cn-tl-presets"></span><span class="cn-tl-range"></span></div>` +
+    tlPanel.innerHTML = `<div class="cn-tl-head"><span class="cn-seg cn-tl-mode"></span><span class="cn-tl-presets"></span><span class="cn-tl-range"></span></div>` +
       '<svg class="cn-tl-svg"><title></title></svg>';
     tlPanel.querySelector("svg title").textContent = T.tlHint;
     stage.after(tlPanel);
     cleanup.push(() => { tlPanel.remove(); });
     const presets = tlPanel.querySelector(".cn-tl-presets");
     const rangeText = tlPanel.querySelector(".cn-tl-range");
-    const playBtn = tlPanel.querySelector(".cn-tl-play"), speedBtn = tlPanel.querySelector(".cn-tl-speed");
     const modeBox = tlPanel.querySelector(".cn-tl-mode");
     const upto = () => options.timeMode === "upto";
     const tl = d3.select(tlPanel.querySelector("svg"));
@@ -618,16 +616,14 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       tlPanel.classList.toggle("upto", upto());
       for (const b of presets.children) b.classList.toggle("active", b.dataset.days === String(options.period) && !options.periodTo);
       for (const b of modeBox.children) b.classList.toggle("on", b.dataset.mode === options.timeMode);
-      speedBtn.textContent = "×" + speed;
     };
-    const preset = (days) => { stop(); options.period = days; options.periodTo = 0; commit(true); };
-    // modes: the frame, or the growth up to the playhead (the playhead is the new edge of the frame)
+    const preset = (days) => { options.period = days; options.periodTo = 0; commit(true); };
+    // modes: the frame, or everything made up to a chosen moment (the playhead is the new edge of the frame)
     for (const m of ["window", "upto"]) {
       const b = document.createElement("button");
       b.textContent = T[m === "window" ? "tlWindow" : "tlUpto"][0]; b.title = T[m === "window" ? "tlWindow" : "tlUpto"][1]; b.dataset.mode = m;
       b.addEventListener("click", () => {
         if (options.timeMode === m) return;
-        stop();
         options.timeMode = m;
         if (m === "upto") options.period = 0;
         else if (options.periodTo) options.period = Math.min(span, options.periodTo + 30) >= span ? 0 : options.periodTo + 30;
@@ -636,41 +632,6 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       });
       modeBox.appendChild(b);
     }
-    // playback: the frame (or the playhead) goes towards today one day per step
-    let speed = 1, timer = 0;
-    function stop() {
-      if (!timer) return;
-      clearInterval(timer); timer = 0;
-      playBtn.textContent = "▶"; playBtn.title = T.tlPlay;
-      saveOption("period", options.period); saveOption("periodTo", options.periodTo);
-    }
-    function step() {
-      if (lo() <= 0) { stop(); return; }
-      options.periodTo = lo() - 1;
-      if (!upto()) { const h = hi() - 1; options.period = h >= span ? 0 : h; }
-      show(); draw();
-      refreshSoon();
-    }
-    function play() {
-      if (timer) { stop(); return; }
-      if (upto()) { if (lo() <= 0) options.periodTo = span; }
-      else {
-        const width = isAll() || lo() <= 0 ? Math.min(span, isAll() ? 7 : hi()) : hi() - lo();
-        if (isAll() || lo() <= 0) { options.period = 0; options.periodTo = Math.max(0, span - width); }
-      }
-      playBtn.textContent = "⏸"; playBtn.title = T.tlPause;
-      show(); draw(); refreshSoon();
-      timer = setInterval(step, 900 / speed);
-    }
-    playBtn.textContent = "▶"; playBtn.title = T.tlPlay;
-    playBtn.addEventListener("click", play);
-    speedBtn.title = T.tlSpeed;
-    speedBtn.addEventListener("click", () => {
-      speed = speed === 1 ? 4 : speed === 4 ? 16 : 1;
-      show();
-      if (timer) { clearInterval(timer); timer = setInterval(step, 900 / speed); }
-    });
-    cleanup.push(() => clearInterval(timer));
     for (const [days, name] of [[1, T.tlDay], [7, T.tlWeek], [30, T.tlMonth], [0, T.allTime]]) {
       const b = document.createElement("button");
       b.className = "cn-btn"; b.textContent = name; b.dataset.days = String(days);
@@ -793,7 +754,6 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     svgNode.addEventListener("pointerleave", () => { if (!drag) dayHover(-1); });
     svgNode.addEventListener("pointerdown", (e) => {
       const x = d3.pointer(e, svgNode)[0];
-      stop();
       dayFocus = null; hoverAge = -1;
       drag = { part: part(x), x, hi: hi(), lo: lo() };
       if (drag.part === "s") scrub(x);
