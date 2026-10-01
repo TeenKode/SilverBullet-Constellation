@@ -1415,7 +1415,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const fontSize = 10.5 * options.labelSize / 100 * Math.min(1.6, Math.max(1, 0.85 / currentScale));
     cullLabels(fontSize);
 
-    const marked = nodeSel.filter((d) => d.overdue || d.soon != null);   // few nodes: the rest have no marks
+    // hover: only nodes with marks need a new opacity; a full restyle also hides the marks of all the others
+    const marked = light ? nodeSel.filter((d) => d.overdue || d.soon != null) : nodeSel;
     marked.select("circle.cn-alert")
       .attr("r", (d) => radius(d) + (d.id === hovered ? 2 : 0) + 3.5)
       .style("display", (d) => (options.marks && d.overdue ? null : "none"))
