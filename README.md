@@ -37,7 +37,7 @@ work**. You can tick off tasks without leaving the graph.
     balance, strictness, size, smallest constellation, how strongly they gather, similarity threads;
   - nodes as dots or as **stars** — a white-hot core, a glow of the group color and rays, bigger for pages with
     more links (glow, rays and core are adjustable);
-  - node size (by links or equal), link width and brightness, starry background, twinkling, dimming on hover;
+  - node size (by links or equal), link width and brightness, starry background (with adjustable brightness), twinkling out of step, dimming on hover;
   - labels: which to show, brightness, size, and font (plain, serif, narrow, mono, rounded, or the SilverBullet one);
   - group colors, timeline brightness, marks, and opening on start.
 - English and Russian interface; light and dark theme (follows SilverBullet on the fly); touch friendly.
