@@ -61,7 +61,7 @@
     starRays: 50,             // ray length, % (0 — no rays)
     starCore: 60,             // how big and white the hot core is, %
     starBright: 100,          // brightness of the background sparkles, %
-    font: "default",          // label font: default, serif, narrow, mono, rounded, sb (as in SilverBullet)
+    font: "default",          // label font: default, serif, narrow, mono, rounded, roboto, verdana, trebuchet, palatino, sb (as in SilverBullet)
   };
   const SETTING_KEYS = ["motion", "repel", "linkDistance", "nodeSize", "linkWidth", "labels", "labelOpacity", "labelSize",
     "colors", "freshBright", "marks", "gravity", "nodeSizeBy", "linkOpacity", "hoverFocus", "nearDepth", "starfield", "twinkle",
@@ -102,6 +102,8 @@
       font: "Font", fontDefault: ["Plain", "The interface font"], fontSerif: ["Serif", "Georgia, Times"],
       fontNarrow: ["Narrow", "Condensed: long names take less room"], fontMono: ["Mono", "Monospaced"],
       fontRounded: ["Rounded", "Soft rounded letters"], fontSb: ["As in SB", "The font of your SilverBullet editor"],
+      fontRoboto: ["Roboto", "Clean modern sans (if installed)"], fontVerdana: ["Verdana", "Wide and very readable"],
+      fontTrebuchet: ["Trebuchet", "Friendly humanist sans"], fontPalatino: ["Palatino", "Classic book serif"],
       sizeLinks: ["Links", "The more links a page has, the bigger its node"], sizeSame: ["Equal", "All nodes are the same size"],
       linkOpacity: "Link brightness", hoverFocus: ["Dim the rest on hover", "The hovered node, its links and neighbours stay bright, everything else dims"],
       nearDepth: "“Nearby” — steps", starfield: ["Starry background", "Tiny stars behind the graph"],
@@ -151,6 +153,8 @@
       font: "Шрифт", fontDefault: ["Обычный", "Шрифт интерфейса"], fontSerif: ["С засечками", "Georgia, Times"],
       fontNarrow: ["Узкий", "Сжатый: длинные названия занимают меньше места"], fontMono: ["Моно", "Моноширинный"],
       fontRounded: ["Круглый", "Мягкие скруглённые буквы"], fontSb: ["Как в SB", "Шрифт редактора SilverBullet"],
+      fontRoboto: ["Roboto", "Чистый современный гротеск (если установлен)"], fontVerdana: ["Verdana", "Широкий и очень читаемый"],
+      fontTrebuchet: ["Trebuchet", "Дружелюбный гуманистический гротеск"], fontPalatino: ["Palatino", "Классический книжный шрифт с засечками"],
       sizeLinks: ["Связям", "Чем больше связей у страницы, тем крупнее узел"], sizeSame: ["Одинаковый", "Все узлы одного размера"],
       linkOpacity: "Яркость связей", hoverFocus: ["Приглушать остальное при наведении", "Наведённый узел, его связи и соседи яркие, остальное тускнеет"],
       nearDepth: "«Рядом» — шагов", starfield: ["Звёздный фон", "Мелкие звёзды за графом"],
@@ -1296,6 +1300,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     narrow: '"Roboto Condensed", "Arial Narrow", "PT Sans Narrow", "Liberation Sans Narrow", sans-serif',
     mono: '"JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace',
     rounded: '"Nunito", "Segoe UI Rounded", "Arial Rounded MT Bold", Comfortaa, system-ui, sans-serif',
+    // popular fonts: used if installed on the computer, otherwise the closest common one
+    roboto: 'Roboto, "Helvetica Neue", Arial, "Liberation Sans", sans-serif',
+    verdana: 'Verdana, "DejaVu Sans", Geneva, sans-serif',
+    trebuchet: '"Trebuchet MS", "Fira Sans", "Segoe UI", sans-serif',
+    palatino: '"Palatino Linotype", Palatino, "Book Antiqua", "URW Palladio L", serif',
   };
   function sbFont() {
     // the panel is an iframe of SilverBullet (srcdoc — the same origin): take the font of its editor
@@ -2008,7 +2017,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     labels.appendChild(slider(T.labelSize, "labelSize", 70, 160, 5, " %", applyLook));
     labels.appendChild(segmented(T.font, "font", [
       ["default", ...T.fontDefault], ["serif", ...T.fontSerif], ["narrow", ...T.fontNarrow],
-      ["mono", ...T.fontMono], ["rounded", ...T.fontRounded], ["sb", ...T.fontSb],
+      ["mono", ...T.fontMono], ["rounded", ...T.fontRounded], ["roboto", ...T.fontRoboto],
+      ["verdana", ...T.fontVerdana], ["trebuchet", ...T.fontTrebuchet], ["palatino", ...T.fontPalatino], ["sb", ...T.fontSb],
     ], applyLook));
     body.appendChild(labels);
 
