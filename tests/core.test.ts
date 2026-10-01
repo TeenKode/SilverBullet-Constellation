@@ -163,3 +163,20 @@ test("noConstellations: the page stays in the graph and is marked", () => {
   assert.equal(byId.get("Index/All")?.noCluster, true);
   assert.equal(byId.get("A")?.noCluster, false);
 });
+
+test("timeline date: the date written in the page wins over the file time; a file stamp in `created` does not", () => {
+  const cfg = normalizeConfig({});
+  const data = buildGraphData("A", {
+    pages: [
+      { name: "A", lastModified: "2026-10-01T04:10:59", created: "2026-10-01T04:10:59", "создано": "2026-09-29" },
+      { name: "B", lastModified: "2026-10-01T04:10:59", created: "2026-10-01T04:10:59" },
+      { name: "C", lastModified: "2026-10-01T04:10:59", created: "2026-09-12" },
+    ],
+    links: [{ page: "A", toPage: "B" }, { page: "B", toPage: "C" }],
+    tasks: [],
+  }, cfg, "en", "2026-10-02");
+  const by = new Map(data.nodes.map((n) => [n.id, n.date]));
+  assert.equal(by.get("A"), "2026-09-29");
+  assert.equal(by.get("B"), "2026-10-01");
+  assert.equal(by.get("C"), "2026-09-12");
+});

@@ -315,20 +315,30 @@ async function main() {
 
     // timeline: the last 7 days — old journal pages fade out, the rest stays in place
     const beforeTime = await layout(fr);
-    await fr.evaluate(() => {
-      const r = document.querySelector(".cn-time-range");
-      r.value = String(Number(r.max) - 7);
-      r.dispatchEvent(new Event("input"));
-      r.dispatchEvent(new Event("change"));
-    });
+    await fr.evaluate(() => document.querySelector(".cn-time-toggle").click());
+    await page.waitForTimeout(400);
+    check("timeline panel opens with bars", await fr.evaluate(() => document.querySelectorAll("#cn-timeline .cn-tl-bar").length > 3));
+    await fr.evaluate(() => [...document.querySelectorAll("#cn-timeline .cn-tl-presets button")].find((b) => b.dataset.days === "7").click());
     await page.waitForTimeout(1500);
     const afterTime = await layout(fr);
     const gone = Object.keys(beforeTime).filter((k) => !afterTime[k]);
     check("timeline hides old pages", gone.includes(`Journal/${shift(-60)}`) && !!afterTime[`Journal/${shift(-1)}`], gone.join(", "));
     check("timeline does not re-lay out the graph", maxShift(beforeTime, afterTime) < 10.5);
-    await fr.locator(".cn-time-label").click();
+    await fr.evaluate(() => [...document.querySelectorAll("#cn-timeline .cn-tl-presets button")].find((b) => b.dataset.days === "0").click());
     await page.waitForTimeout(1200);
     check("“All time” brings them back", Object.keys(await layout(fr)).length === Object.keys(beforeTime).length);
+    // “to a date” mode: a click on the bars shows the pages made up to that day
+    const tlBox = await fr.evaluate(() => { const r = document.querySelector("#cn-timeline svg").getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; });
+    const fbox = await (await fr.frameElement()).boundingBox();
+    await fr.evaluate(() => document.querySelector('#cn-timeline [data-mode="upto"]').click());
+    await page.waitForTimeout(300);
+    await page.mouse.click(fbox.x + tlBox[0] + tlBox[2] * 0.2, fbox.y + tlBox[1] + 20);
+    await page.waitForTimeout(1200);
+    const grown = await shownCount();
+    check("to-a-date mode: newer pages are hidden", grown < wholeCount, `${grown} of ${wholeCount}`);
+    await fr.evaluate(() => document.querySelector('#cn-timeline [data-mode="window"]').click());
+    await fr.evaluate(() => [...document.querySelectorAll("#cn-timeline .cn-tl-presets button")].find((b) => b.dataset.days === "0").click());
+    await page.waitForTimeout(800);
     if (shots) {
       await page.evaluate(() => { client.runCommandByName("Editor: Toggle Dark Mode"); });
       await page.waitForTimeout(1500);

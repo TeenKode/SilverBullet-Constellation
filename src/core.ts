@@ -21,6 +21,7 @@ export interface Config {
   dueAttributes: string[];                // task attributes holding a due date (overdue ring)
   upcoming: { attribute: string; days: number; prefix: string; mirror: string } | null;
   exclude: string[];                      // pages never shown: "Folder/" prefixes or exact names
+  dateAttributes: string[];               // page attributes holding the date the page was made (timeline); then the modified time
   noConstellations: string[];             // pages shown, but kept out of constellations (hubs): "Folder/" prefixes or exact names
   openOnStart: boolean;                   // default for "open the graph when the space opens on the start page"
   startPage: string;
@@ -48,6 +49,7 @@ export function normalizeConfig(raw: unknown): Config {
     upcoming: up && up.attribute ? { ...up, days: Number(up.days) || 14 } : null,
     exclude: DEFAULT_EXCLUDE.concat(list(c.exclude)),
     noConstellations: list(c.noConstellations),
+    dateAttributes: [...list(c.dateAttribute), "created", "создано"],
     openOnStart: !!c.openOnStart,
     startPage: typeof c.startPage === "string" ? c.startPage : "index",
     homeLabel: typeof c.homeLabel === "string" ? c.homeLabel : "",
@@ -306,14 +308,16 @@ export function weekMonday(year: number, week: number): string {
   return isoDate(monday);
 }
 // Node date for the timeline: a page named by a date — that day, by an ISO week — its Monday,
-// otherwise — when the page was last modified; undated groups — none
-export function nodeDate(name: string, lastModified: unknown, undated = false): string {
+// otherwise — the date written in the page (`created:`, see `dateAttribute`), otherwise when it was last modified; undated groups — none
+export function nodeDate(name: string, lastModified: unknown, undated = false, created: unknown = ""): string {
   const leaf = name.slice(name.lastIndexOf("/") + 1);
   const day = leaf.match(/^\d{4}-\d{2}-\d{2}$/);
   if (day) return day[0];
   const w = leaf.match(/^(\d{4})-W(\d{2})$/);
   if (w) return weekMonday(Number(w[1]), Number(w[2]));
   if (undated) return "";
+  const own = String(created ?? "").match(/^\d{4}-\d{2}-\d{2}/);
+  if (own) return own[0];
   const s = String(lastModified ?? "");
   const d = s.match(/^\d{4}-\d{2}-\d{2}/) ? new Date(s) : typeof lastModified === "number" ? new Date(lastModified) : null;
   return d && !isNaN(d.getTime()) ? isoDate(d) : "";
@@ -376,7 +380,9 @@ export function buildGraphData(currentPage: string, objects: IndexObjects, cfg: 
       const days = daysBetween(today, when[0]);
       if (days >= 0 && days <= up.days) soon = days;
     }
-    info.set(name, { date: nodeDate(name, page.lastModified, undated.has(groupOf(name, cfg.groups))), soon, soonVia: "" });
+    // a plain date only: SilverBullet's own `created` is a time stamp of the file
+    const written = cfg.dateAttributes.map((k) => page[k]).find((v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v));
+    info.set(name, { date: nodeDate(name, page.lastModified, undated.has(groupOf(name, cfg.groups)), written), soon, soonVia: "" });
   }
   // "mirror": the page with the same name under another prefix (an event's topic) gets the mark too
   if (up && up.prefix && up.mirror) {

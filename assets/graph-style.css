@@ -530,3 +530,23 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
 .cn-hide-toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cn-hidden-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 2px 0; }
 .cn-hidden-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the timeline under the graph: bars of pages by day with a frame (the period shown) */
+.cn-time-toggle { white-space: nowrap; }
+.cn-time-toggle.on, .cn-time.active .cn-time-toggle { color: var(--cn-btn-active, #7c3aed); }
+#cn-timeline { flex: 0 0 auto; width: 100%; padding: 6px 14px 8px; border-top: 1px solid var(--cn-card-border); background: var(--cn-bg); }
+.cn-tl-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
+.cn-tl-presets { display: inline-flex; gap: 4px; }
+.cn-tl-range { margin-left: auto; opacity: 0.8; }
+.cn-tl-svg { display: block; width: 100%; height: 58px; touch-action: none; user-select: none; overflow: visible; }
+.cn-tl-bar { opacity: 0.85; }
+.cn-tl-frame { fill: var(--cn-btn-active, #7c3aed); fill-opacity: 0.16; stroke: var(--cn-btn-active, #7c3aed); stroke-width: 1.2; }
+.cn-tl-win.all .cn-tl-frame { fill-opacity: 0.05; stroke-opacity: 0.4; stroke-dasharray: 3 3; }
+.cn-tl-win.all .cn-tl-handle { display: none; }
+.cn-tl-handle { fill: var(--cn-btn-active, #7c3aed); }
+.cn-tl-axis rect { fill: currentColor; opacity: 0.4; }
+.cn-tl-axis text { font-size: 9.5px; fill: currentColor; opacity: 0.65; }
+.cn-tl-head .cn-seg { display: inline-flex; }
+.cn-tl-head .cn-seg button { padding: 3px 9px; }
+#cn-timeline.upto .cn-tl-presets button:not([data-days="0"]) { display: none; }
+.cn-tl-head-line { fill: var(--cn-btn-active, #7c3aed); }

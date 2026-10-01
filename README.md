@@ -21,7 +21,7 @@ work**. You can tick off tasks without leaving the graph.
   group per top-level folder.
 - **A page card**: rendered content, `${…}` queries and widgets, linked pages, and an **Open page** button.
   **Task checkboxes write straight into the page**, including tasks shown by queries from other pages.
-- **Timeline**: a slider shows only pages from the last N days. Recent pages are brighter, older ones fade.
+- **Timeline**: a panel under the graph (button in the legend) — bars of pages by day, colored by group. Drag the frame to slide the period, its edges to resize it, or draw a new one; **Day / Week / Month / All** are one click away. In **To a date** mode a click on the bars shows everything made up to that day. Pointing at a bar lights up the pages of that day. Recent pages are brighter, older ones fade.
 - **Marks**: a red ring on pages with overdue tasks, and “in N days” on upcoming events.
 - **Links from task attributes**: `[who: Ann]` can link the page to `People/Ann`, so people are not orphans.
 - **Constellations**: pages about the same thing gather and glow like nebulae, each with its own color and a name
@@ -113,13 +113,14 @@ config.set("constellation", {
 | `dueAttributes` | `{"due", "deadline"}` | task attributes holding a due date (`YYYY-MM-DD`) for the overdue ring |
 | `upcoming` | `{attribute = "date", days = 14}` | pages whose `attribute` date is within `days` get “in N days”. `prefix` limits the mark to a folder; `mirror` also marks the page with the same name under another prefix (an event's project). Use `false` to switch it off. |
 | `exclude` | — | more pages to hide: `"Folder/"` prefixes or exact names. `Library/`, `Repositories/`, `_…`, `CONFIG`, `PLUGS`, `SETTINGS` and `SECRETS` are always hidden. |
+| `dateAttribute` | `{"created", "создано"}` | page attribute(s) with the date the page was made (`YYYY-MM-DD`), used by the timeline instead of the modification time |
 | `noConstellations` | — | pages that stay on the graph but never belong to a constellation (an index of everything, a “similar topics” page): `"Folder/"` prefixes or exact names. Pages that glue several topics are also found automatically (⚙ → “Hubs stay out”). |
 | `similarity` | `true` | read page texts to find pages about the same thing (constellations). `false` — links only; texts are never read. |
 | `similarityMaxPages` | `1500` | with more pages than this the texts are not read |
 | `extraCss` | `""` | extra CSS for the graph panel, for example styles of your own widgets shown in the card |
 
 Timeline dates: a page named by a date (`Journal/2026-09-28`) uses that day. A page named by an ISO week
-(`Weekly/2026-W39`) uses the Monday of that week. Other pages use their last modification.
+(`Weekly/2026-W39`) uses the Monday of that week. Other pages use the date written in the page (`created: 2026-09-28`, or `создано:`; more names in `dateAttribute`), otherwise their last modification.
 
 Per-browser settings (⚙, legend filters, the timeline) are kept in the browser. **Reset settings** in ⚙ restores
 the defaults.
