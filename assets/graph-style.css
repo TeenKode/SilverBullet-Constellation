@@ -489,7 +489,7 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
   letter-spacing: 0.16em;
   text-transform: uppercase;
   pointer-events: all;
-  cursor: default;
+  cursor: grab;
   user-select: none;
   transition: opacity 0.25s ease, transform 0.6s ease;   /* names glide apart instead of jumping */
 }

@@ -1026,6 +1026,33 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .on("pointerleave", () => { clusterHoverSoon(null); })
       // a click on the name brings the constellation closer
       .on("click", (event, x) => { event.stopPropagation(); pinCluster(x.c.id); });
+    // drag by the name: the whole constellation moves with it (members are held like a dragged node)
+    nebLabelSel.call(d3.drag()
+      .on("start", (event, x) => {
+        stopTween();
+        dragging = true;
+        x.grab = { x: event.x, y: event.y, from: x.members.map((d) => [d, d.x, d.y]) };
+        for (const [d] of x.grab.from) { d.fx = d.x; d.fy = d.y; }
+        if (options.motion !== "still" && !event.active) sim.alphaTarget(0.18).restart();
+      })
+      .on("drag", (event, x) => {
+        const dx = event.x - x.grab.x, dy = event.y - x.grab.y;
+        for (const [d, x0, y0] of x.grab.from) {
+          d.fx = x0 + dx; d.fy = y0 + dy;
+          if (options.motion === "still") { d.x = d.fx; d.y = d.fy; }
+        }
+        if (options.motion === "still") place();
+      })
+      .on("end", (event, x) => {
+        dragging = false;
+        for (const [d] of x.grab.from) {
+          if (options.motion === "still") { d.x = d.fx; d.y = d.fy; }
+          d.fx = null; d.fy = null;
+        }
+        x.grab = null;
+        if (options.motion !== "still" && !event.active) startMotion(0);
+        scheduleSave(1200, true);
+      }));
     // a click on the cloud itself does the same (the layer does not catch the pointer, the circles do)
     nebSel.on("click", (event, x) => { event.stopPropagation(); pinCluster(x.c.id); });
     styleNebulae();
