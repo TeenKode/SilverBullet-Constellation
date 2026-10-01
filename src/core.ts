@@ -21,6 +21,7 @@ export interface Config {
   dueAttributes: string[];                // task attributes holding a due date (overdue ring)
   upcoming: { attribute: string; days: number; prefix: string; mirror: string } | null;
   exclude: string[];                      // pages never shown: "Folder/" prefixes or exact names
+  noConstellations: string[];             // pages shown, but kept out of constellations (hubs): "Folder/" prefixes or exact names
   openOnStart: boolean;                   // default for "open the graph when the space opens on the start page"
   startPage: string;
   homeLabel: string;
@@ -46,6 +47,7 @@ export function normalizeConfig(raw: unknown): Config {
     dueAttributes: c.dueAttributes ? list(c.dueAttributes) : ["due", "deadline"],
     upcoming: up && up.attribute ? { ...up, days: Number(up.days) || 14 } : null,
     exclude: DEFAULT_EXCLUDE.concat(list(c.exclude)),
+    noConstellations: list(c.noConstellations),
     openOnStart: !!c.openOnStart,
     startPage: typeof c.startPage === "string" ? c.startPage : "index",
     homeLabel: typeof c.homeLabel === "string" ? c.homeLabel : "",
@@ -157,8 +159,12 @@ export function pageTitle(name: string, lang: Lang = "en"): string {
   return leaf.replace(/[\[\]|]/g, "");
 }
 
+export function inList(name: string, list: string[]): boolean {
+  return list.some((p) => (p.endsWith("/") || p === "_" ? name.startsWith(p) : name === p));
+}
+
 export function isExcluded(name: string, cfg: Pick<Config, "exclude">): boolean {
-  return cfg.exclude.some((p) => (p.endsWith("/") || p === "_" ? name.startsWith(p) : name === p));
+  return inList(name, cfg.exclude);
 }
 
 // Task attribute values: "Ann, Bob" / "Мария и Олег" → ["Ann", "Bob"]
@@ -320,6 +326,7 @@ export type GraphNode = {
   id: string; group: string; label: string; isCurrent: boolean; isOrphan: boolean;
   date: string; overdue: number; soon: number | null; soonVia: string;
   periodic: boolean;             // a day or a week summary: not clustered, not compared by text
+  noCluster: boolean;            // listed in `noConstellations`: shown, but never in a constellation
 };
 
 export type IndexObjects = { links: any[]; pages: any[]; tasks: any[] };
@@ -341,7 +348,7 @@ export function buildGraphData(currentPage: string, objects: IndexObjects, cfg: 
       nodes.set(id, {
         id, group: groupOf(id, cfg.groups), label: labelOf(id, lang, cfg), isCurrent: id === currentPage, isOrphan: false,
         date: extra?.date ?? "", overdue: overdue.get(id) ?? 0, soon: extra?.soon ?? null, soonVia: extra?.soonVia ?? "",
-        periodic: isPeriodic(id),
+        periodic: isPeriodic(id), noCluster: inList(id, cfg.noConstellations),
       });
     }
   };

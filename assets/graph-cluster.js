@@ -10,7 +10,7 @@
   //          textWeight: 0..1, similarity: 0..1 (strictness: the bigger, the fewer weak similarities count),
   //          resolution: 0.3..2 (bigger — smaller constellations), minSize, label: id → text, rank: id → number }
   // result: { of: Map id → constellation id, clusters: [{ id, members, name, size }] }
-  function detect(input) {
+  function detectOnce(input) {
     const skip = input.skip || new Set();
     const ids = input.ids.filter((id) => !skip.has(id)).sort();
     const index = new Map(ids.map((id, i) => [id, i]));
@@ -104,6 +104,48 @@
     }
     clusters.sort((a, b) => b.size - a.size || (a.id < b.id ? -1 : 1));
     return { of, clusters };
+  }
+
+  // A hub is a page that glues topics: its neighbours (links and similar texts) are spread over several constellations
+  // — no one of them holds most of them — and there are many of them. Such a page (“similar topics”, an index of
+  // everything) must neither make a constellation nor give it a name. A real center of one topic has its
+  // neighbours in its own constellation and is not touched.
+  function findHubs(input, first) {
+    const minSize = input.minSize || 3;
+    const floor = 0.1 + 0.4 * Math.min(1, Math.max(0, input.similarity == null ? 0.4 : input.similarity));
+    const skip = input.skip || new Set();
+    const near = new Map();
+    const tie = (a, b) => {
+      if (a === b || skip.has(a) || skip.has(b)) return;
+      if (!near.has(a)) near.set(a, new Set());
+      if (!near.has(b)) near.set(b, new Set());
+      near.get(a).add(b); near.get(b).add(a);
+    };
+    for (const [a, b] of input.links || []) tie(a, b);
+    for (const [a, b, w] of input.sims || []) if (w >= floor) tie(a, b);
+    const hubs = [];
+    for (const [id, set] of near) {
+      if (set.size < Math.max(6, 2 * minSize)) continue;
+      const parts = new Map();
+      for (const x of set) {
+        const c = first.of.get(x);
+        const key = c === undefined ? "-" : c;
+        parts.set(key, (parts.get(key) || 0) + 1);
+      }
+      const counts = [...parts.entries()].filter(([key]) => key !== "-").map(([, n]) => n).sort((x, y) => y - x);
+      if (counts.length >= 2 && counts[0] <= 0.65 * set.size && counts[1] >= Math.max(2, 0.2 * set.size)) hubs.push(id);
+    }
+    return hubs.sort();
+  }
+
+  // + input.hubs !== false: hubs are found and left out; result.hubs lists them
+  function detect(input) {
+    const first = detectOnce(input);
+    if (input.hubs === false) return { ...first, hubs: [] };
+    const hubs = findHubs(input, first);
+    if (!hubs.length) return { ...first, hubs: [] };
+    const r = detectOnce({ ...input, skip: new Set([...(input.skip || []), ...hubs]) });
+    return { ...r, hubs };
   }
 
   const api = { detect };
