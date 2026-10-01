@@ -173,7 +173,7 @@ async function main() {
       clusters.some((c) => garden.every((id) => c.members.includes(id))), clusters.map((c) => `${c.name}(${c.members.length})`).join(", "));
     check("day summaries are not in constellations", !clusters.some((c) => c.members.some((id) => /\d{4}-\d{2}-\d{2}$/.test(id))));
     check("starry background and twinkling", await fr.evaluate(() => document.querySelector("#cn-container").classList.contains("cn-starfield")
-      && document.querySelector("svg").classList.contains("cn-twinkle")));
+      && document.querySelector("svg:not(.cn-neb-svg)").classList.contains("cn-twinkle")));
     // settings: nebulae off and on again
     await fr.evaluate(() => document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click());
     await page.waitForTimeout(500);
@@ -230,6 +230,28 @@ async function main() {
     await page.waitForTimeout(800);
     await fr.evaluate(() => document.querySelector(".cn-icon[data-act=close]").click());
     if (shots) await page.screenshot({ path: join(shots, "nebulae.png") });
+
+    // hover (node and constellation name) keeps the colors of the nodes: a lost fill made them black
+    const fills = () => fr.evaluate(() => [...document.querySelectorAll("circle.cn-dot")].filter((c) => !c.style.fill).length);
+    await fr.evaluate(() => document.querySelector(".cn-node").dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" })));
+    await page.waitForTimeout(400);
+    check("hover keeps the fill of nodes", (await fills()) === 0);
+    await fr.evaluate(() => document.querySelector(".cn-neb-label").dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" })));
+    await page.waitForTimeout(400);
+    check("constellation hover keeps the fill of nodes", (await fills()) === 0);
+    await fr.evaluate(() => document.querySelector(".cn-neb-label").dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" })));
+    await fr.evaluate(() => document.querySelector(".cn-node").dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" })));
+    await page.waitForTimeout(400);
+
+    // a click on a constellation name: centered and zoomed, the rest dimmed; again — released
+    const tf = () => fr.evaluate(() => document.querySelector("svg:not(.cn-neb-svg) > g").getAttribute("transform"));
+    const t0 = await tf();
+    await fr.evaluate(() => document.querySelector(".cn-neb-label").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await page.waitForTimeout(900);
+    const dim = await fr.evaluate(() => [...document.querySelectorAll("circle.cn-dot")].filter((c) => parseFloat(c.style.opacity) < 0.3).length);
+    check("click on a constellation: zoom to it and dim the rest", (await tf()) !== t0 && dim > 0, `dimmed ${dim}, ${t0} -> ${await tf()}`);
+    await fr.evaluate(() => document.querySelector(".cn-neb-label").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await page.waitForTimeout(700);
 
     // right click hides a page (also out of the constellations); the note undoes it
     const nodeCount = () => fr.evaluate(() => document.querySelectorAll(".cn-node:not(.cn-leaving)").length);
