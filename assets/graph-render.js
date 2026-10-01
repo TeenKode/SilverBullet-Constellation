@@ -60,12 +60,13 @@
     starGlow: 60,             // how far the glow spreads, %
     starRays: 50,             // ray length, % (0 — no rays)
     starCore: 60,             // how big and white the hot core is, %
-    font: "default",          // label font: default, serif, narrow, mono, rounded, sb (as in SilverBullet)
+    starBright: 100,          // brightness of the background sparkles, %
+    font: "default",          // label font: default, serif, narrow, mono, rounded, roboto, verdana, trebuchet, palatino, sb (as in SilverBullet)
   };
   const SETTING_KEYS = ["motion", "repel", "linkDistance", "nodeSize", "linkWidth", "labels", "labelOpacity", "labelSize",
     "colors", "freshBright", "marks", "gravity", "nodeSizeBy", "linkOpacity", "hoverFocus", "nearDepth", "starfield", "twinkle",
     "nebulae", "nebulaOpacity", "nebulaSoft", "nebulaColor", "nebulaLabels", "nebulaMin", "textWeight", "similarity",
-    "clusterSize", "clusterPull", "simLinks", "nodeStyle", "starGlow", "starRays", "starCore", "font"];
+    "clusterSize", "clusterPull", "simLinks", "nodeStyle", "starGlow", "starRays", "starCore", "starBright", "font"];
 
   const LANG = window.__CN_LANG__ === "ru" ? "ru" : "en";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -97,10 +98,12 @@
       gravity: "Pull to the center", nodeSizeBy: "Node size by",
       nodeStyle: "Nodes look like", styleDots: ["Dots", "Flat colored circles"],
       styleStars: ["Stars", "A white-hot core, a colored glow and rays"],
-      starGlow: "Star glow", starRays: "Star rays", starCore: "Star core",
+      starGlow: "Star glow", starRays: "Star rays", starCore: "Star core", starBright: "Background stars brightness",
       font: "Font", fontDefault: ["Plain", "The interface font"], fontSerif: ["Serif", "Georgia, Times"],
       fontNarrow: ["Narrow", "Condensed: long names take less room"], fontMono: ["Mono", "Monospaced"],
       fontRounded: ["Rounded", "Soft rounded letters"], fontSb: ["As in SB", "The font of your SilverBullet editor"],
+      fontRoboto: ["Roboto", "Clean modern sans (if installed)"], fontVerdana: ["Verdana", "Wide and very readable"],
+      fontTrebuchet: ["Trebuchet", "Friendly humanist sans"], fontPalatino: ["Palatino", "Classic book serif"],
       sizeLinks: ["Links", "The more links a page has, the bigger its node"], sizeSame: ["Equal", "All nodes are the same size"],
       linkOpacity: "Link brightness", hoverFocus: ["Dim the rest on hover", "The hovered node, its links and neighbours stay bright, everything else dims"],
       nearDepth: "“Nearby” — steps", starfield: ["Starry background", "Tiny stars behind the graph"],
@@ -146,10 +149,12 @@
       gravity: "Притяжение к центру", nodeSizeBy: "Размер узла по",
       nodeStyle: "Узлы — это", styleDots: ["Кружки", "Плоские цветные кружки"],
       styleStars: ["Звёзды", "Раскалённое белое ядро, сияние цвета раздела и лучи"],
-      starGlow: "Сияние звёзд", starRays: "Лучи звёзд", starCore: "Ядро звёзд",
+      starGlow: "Сияние звёзд", starRays: "Лучи звёзд", starCore: "Ядро звёзд", starBright: "Яркость звёздного фона",
       font: "Шрифт", fontDefault: ["Обычный", "Шрифт интерфейса"], fontSerif: ["С засечками", "Georgia, Times"],
       fontNarrow: ["Узкий", "Сжатый: длинные названия занимают меньше места"], fontMono: ["Моно", "Моноширинный"],
       fontRounded: ["Круглый", "Мягкие скруглённые буквы"], fontSb: ["Как в SB", "Шрифт редактора SilverBullet"],
+      fontRoboto: ["Roboto", "Чистый современный гротеск (если установлен)"], fontVerdana: ["Verdana", "Широкий и очень читаемый"],
+      fontTrebuchet: ["Trebuchet", "Дружелюбный гуманистический гротеск"], fontPalatino: ["Palatino", "Классический книжный шрифт с засечками"],
       sizeLinks: ["Связям", "Чем больше связей у страницы, тем крупнее узел"], sizeSame: ["Одинаковый", "Все узлы одного размера"],
       linkOpacity: "Яркость связей", hoverFocus: ["Приглушать остальное при наведении", "Наведённый узел, его связи и соседи яркие, остальное тускнеет"],
       nearDepth: "«Рядом» — шагов", starfield: ["Звёздный фон", "Мелкие звёзды за графом"],
@@ -392,6 +397,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       .force("cluster", clusterForce())
       .force("collide", d3.forceCollide().radius((d) => radiusOf(d) + 6 + labelRoom(d.id)).strength(0.9).iterations(2));
   }
+
+  // Twinkling out of step: every star has its own period (1.8–8 s, squared so that quick ones are as common
+  // as slow ones), its own phase and — for rays — its own depth, so no two stars blink together
+  const twinkleTime = (key) => (1.8 + hash01(key) * hash01(key + "#") * 6.2).toFixed(2) + "s";
+  const twinkleDelay = (key) => (-hash01(key) * 40).toFixed(2) + "s";
 
   // ---------------------------------------------------------------- layout (one for the whole space)
   function hash01(str) {
@@ -907,13 +917,12 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         (en) => {
           const ng = en.append("g").attr("class", "cn-node");
           ng.append("path").attr("class", "cn-rays")              // star rays — under the core
-            .style("--d", (d) => (2.6 + hash01(d.id + "*") * 3.4).toFixed(2) + "s")
-            .style("--dl", (d) => (-hash01(d.id + "~") * 6).toFixed(2) + "s");
+            .style("--d", (d) => twinkleTime(d.id + "*")).style("--dl", (d) => twinkleDelay(d.id + "~"))
+            .style("--lo", (d) => (0.1 + hash01(d.id + "%") * 0.4).toFixed(2));
           ng.append("circle").attr("class", "cn-dot");
           ng.append("circle").attr("class", "cn-alert");        // overdue ring — no fill, around the node
           ng.append("circle").attr("class", "cn-halo")           // twinkling glow (after the node: its circle stays the first)
-            .style("--d", (d) => (2.6 + hash01(d.id + "^") * 3.4).toFixed(2) + "s")
-            .style("--dl", (d) => (-hash01(d.id + "!") * 6).toFixed(2) + "s");
+            .style("--d", (d) => twinkleTime(d.id + "^")).style("--dl", (d) => twinkleDelay(d.id + "!"));
           ng.append("title").text((d) => d.id);
           const text = ng.append("text").attr("class", "cn-label").attr("text-anchor", "middle");
           text.selectAll("tspan").data((d) => d.lines).join("tspan")
@@ -1291,6 +1300,11 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     narrow: '"Roboto Condensed", "Arial Narrow", "PT Sans Narrow", "Liberation Sans Narrow", sans-serif',
     mono: '"JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace',
     rounded: '"Nunito", "Segoe UI Rounded", "Arial Rounded MT Bold", Comfortaa, system-ui, sans-serif',
+    // popular fonts: used if installed on the computer, otherwise the closest common one
+    roboto: 'Roboto, "Helvetica Neue", Arial, "Liberation Sans", sans-serif',
+    verdana: 'Verdana, "DejaVu Sans", Geneva, sans-serif',
+    trebuchet: '"Trebuchet MS", "Fira Sans", "Segoe UI", sans-serif',
+    palatino: '"Palatino Linotype", Palatino, "Book Antiqua", "URW Palladio L", serif',
   };
   function sbFont() {
     // the panel is an iframe of SilverBullet (srcdoc — the same origin): take the font of its editor
@@ -1867,6 +1881,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const applyLook = () => {
     applyFont();
     container.classList.toggle("cn-starfield", !!options.starfield);
+    container.style.setProperty("--cn-sf", String(options.starBright / 100));
     restyle();
   };
   const styleNebulaeNow = () => styleNebulae();
@@ -1988,7 +2003,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     ], () => { applyLook(); applyForces(); }));
     look.appendChild(slider(T.linkWidth, "linkWidth", 50, 300, 10, " %", applyLook));
     look.appendChild(slider(T.linkOpacity, "linkOpacity", 10, 100, 5, " %", applyLook));
-    look.appendChild(checkbox(T.starfield[0], "starfield", T.starfield[1], applyLook));
+    look.appendChild(checkbox(T.starfield[0], "starfield", T.starfield[1], () => { applyLook(); renderSettings(); }));
+    if (options.starfield) look.appendChild(slider(T.starBright, "starBright", 0, 300, 10, " %", applyLook));
     look.appendChild(checkbox(T.twinkle[0], "twinkle", T.twinkle[1], () => restyle()));
     look.appendChild(checkbox(T.hoverFocus[0], "hoverFocus", T.hoverFocus[1], () => restyle()));
     body.appendChild(look);
@@ -2001,7 +2017,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     labels.appendChild(slider(T.labelSize, "labelSize", 70, 160, 5, " %", applyLook));
     labels.appendChild(segmented(T.font, "font", [
       ["default", ...T.fontDefault], ["serif", ...T.fontSerif], ["narrow", ...T.fontNarrow],
-      ["mono", ...T.fontMono], ["rounded", ...T.fontRounded], ["sb", ...T.fontSb],
+      ["mono", ...T.fontMono], ["rounded", ...T.fontRounded], ["roboto", ...T.fontRoboto],
+      ["verdana", ...T.fontVerdana], ["trebuchet", ...T.fontTrebuchet], ["palatino", ...T.fontPalatino], ["sb", ...T.fontSb],
     ], applyLook));
     body.appendChild(labels);
 
@@ -2087,6 +2104,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   }
 
   container.classList.toggle("cn-starfield", !!options.starfield);
+  container.style.setProperty("--cn-sf", String(options.starBright / 100));
   applyFont();
   draw(false);
   loadSimilarity();

@@ -19,7 +19,8 @@
   --cn-card-shadow: 0 18px 50px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.08);
   --cn-chip-bg: #f1f3f7;
   --cn-link: #6d3ff5;
-  --cn-star: rgba(60, 66, 82, 0.28);
+  --cn-star-rgb: 60, 66, 82;
+  --cn-star-a: 0.28;
 }
 
 :root[data-theme="dark"] {
@@ -42,7 +43,8 @@
   --cn-card-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   --cn-chip-bg: #30333b;
   --cn-link: #b39dfa;
-  --cn-star: rgba(215, 220, 235, 0.55);
+  --cn-star-rgb: 215, 220, 235;
+  --cn-star-a: 0.55;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -495,6 +497,7 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
 }
 .cn-sims line { stroke: var(--cn-edge-hi); stroke-width: 1; stroke-dasharray: 2 5; stroke-linecap: round; fill: none; }
 #cn-container.cn-starfield {
+  --cn-star: rgba(var(--cn-star-rgb), calc(var(--cn-star-a) * var(--cn-sf, 1)));
   background-image:
     radial-gradient(1px 1px at 8% 18%, var(--cn-star) 50%, transparent 52%),
     radial-gradient(1.4px 1.4px at 62% 71%, var(--cn-star) 50%, transparent 52%),
@@ -506,12 +509,12 @@ body:not(.cn-full) .cn-time-range { width: 90px; }
 }
 .cn-halo { pointer-events: none; opacity: 0; }
 .cn-twinkle .cn-halo { animation: cn-twinkle var(--d, 4s) ease-in-out var(--dl, 0s) infinite; }
-@keyframes cn-twinkle { 0%, 100% { opacity: 0; } 50% { opacity: 0.4; } }
+@keyframes cn-twinkle { 0%, 100% { opacity: 0; } 22% { opacity: 0.4; } 38% { opacity: 0.1; } 71% { opacity: 0.3; } }
 .cn-hint { font-size: 11.5px; opacity: 0.65; margin: 2px 0 6px; }
 @media (prefers-reduced-motion: reduce) { .cn-twinkle .cn-halo { animation: none; } }
 
 /* stars: rays twinkle (fill-opacity — so that dimming by focus, set through opacity, keeps working) */
 .cn-rays { pointer-events: none; }
 .cn-twinkle .cn-rays { animation: cn-rays var(--d, 4s) ease-in-out var(--dl, 0s) infinite; }
-@keyframes cn-rays { 0%, 100% { fill-opacity: 0.9; } 50% { fill-opacity: 0.4; } }
+@keyframes cn-rays { 0%, 100% { fill-opacity: 0.9; } 24% { fill-opacity: var(--lo, 0.4); } 41% { fill-opacity: 0.8; } 73% { fill-opacity: calc(var(--lo, 0.4) + 0.2); } }
 @media (prefers-reduced-motion: reduce) { .cn-twinkle .cn-rays { animation: none; } }
