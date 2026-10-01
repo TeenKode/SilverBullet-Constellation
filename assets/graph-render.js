@@ -23,7 +23,7 @@
   };
 
   const DEFAULTS = {
-    mode: "all", hidden: [], showOrphans: false, startWithGraph: false,
+    mode: "all", hidden: [], hiddenNodes: [], showOrphans: false, startWithGraph: false,
     motion: "float",          // float — drift; calm — physics only while dragging; still — no motion
     repel: 50,                // repulsion, 0–100
     linkDistance: 70,         // link length, px
@@ -76,6 +76,8 @@
       orphans: ["Orphans", "Show pages without links"], search: "Search…", fit: "Fit the graph to the window",
       settings: "Graph settings", closeGraph: "Close the graph (Esc)", timeline: "Timeline: which pages to show",
       since: (d) => `since ${d}`, allTime: "All time", allTimeHint: "Click to show all time", show: "Show", hide: "Hide",
+      hiddenPages: "Hidden pages", hiddenHint: "Right-click a node to hide it", hiddenNone: "none", showAll: "Show all",
+      pageHidden: (n) => `Hidden: ${n}`, undo: "Undo",
       empty: "No linked pages yet", close: "Close (Esc)", closeShort: "Close", linked: "Linked", openPage: "Open page",
       missing: "This page does not exist yet — it is only linked to.", emptyPage: "Empty page",
       imageMissing: "[image unavailable]", tick: "Mark as done", untick: "Mark as not done",
@@ -127,6 +129,8 @@
       orphans: ["Без связей", "Показать страницы без ссылок"], search: "Поиск…", fit: "Вписать граф в окно",
       settings: "Настройки графа", closeGraph: "Закрыть граф (Esc)", timeline: "Лента времени: какие страницы показывать",
       since: (d) => `с ${d}`, allTime: "Всё время", allTimeHint: "Нажмите — показать всё время", show: "Показать", hide: "Скрыть",
+      hiddenPages: "Скрытые страницы", hiddenHint: "Правый клик по узлу — скрыть его", hiddenNone: "нет", showAll: "Показать все",
+      pageHidden: (n) => `Скрыто: ${n}`, undo: "Отменить",
       empty: "В базе пока нет страниц со ссылками", close: "Закрыть (Esc)", closeShort: "Закрыть", linked: "Связано",
       openPage: "Открыть заметку", missing: "Страница ещё не создана — на неё только ссылаются.", emptyPage: "Пустая страница",
       imageMissing: "[изображение недоступно]", tick: "Отметить выполненной", untick: "Снять отметку",
@@ -299,7 +303,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   function recluster() {
     clusterOf = new Map(); clusters = []; clusterById = new Map();
     if (!options.nebulae || !window.CNCluster) return;
-    const skip = new Set(all.nodes.filter((n) => n.periodic).map((n) => n.id));
+    const skip = new Set(all.nodes.filter((n) => n.periodic || options.hiddenNodes.includes(n.id)).map((n) => n.id));
     const r = window.CNCluster.detect({
       ids: all.nodes.map((n) => n.id), links: all.edges.map((e) => [e.source, e.target]), sims: simData, skip,
       textWeight: options.textWeight / 100, similarity: options.similarity / 100,
@@ -591,11 +595,40 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     }
   }
 
+  // ---------------------------------------------------------------- hidden pages
+  let hideToast = null, hideToastTimer = 0;
+  function setHiddenPages(list) {
+    options.hiddenNodes = list;
+    saveOption("hiddenNodes", list);
+    if (hovered && list.includes(hovered)) setHover(null, false);
+    if (selected && list.includes(selected)) closeCard();
+    refresh(false);
+    applyClusters(false);
+    if (settingsPanel && settingsPanel.classList.contains("open")) renderSettings();
+  }
+  function hidePage(id) {
+    if (options.hiddenNodes.includes(id)) return;
+    setHiddenPages(options.hiddenNodes.concat([id]));
+    const n = nodeById.get(id);
+    if (hideToast) hideToast.remove();
+    clearTimeout(hideToastTimer);
+    hideToast = document.createElement("div");
+    hideToast.className = "cn-hide-toast";
+    hideToast.innerHTML = `<span>${esc(T.pageHidden(n ? n.label : id))}</span><button class="cn-btn">${esc(T.undo)}</button>`;
+    hideToast.querySelector("button").addEventListener("click", () => {
+      setHiddenPages(options.hiddenNodes.filter((x) => x !== id));
+      hideToast.remove(); hideToast = null;
+    });
+    container.appendChild(hideToast);
+    hideToastTimer = setTimeout(() => { if (hideToast) hideToast.remove(); hideToast = null; }, 6000);
+  }
+  cleanup.push(() => clearTimeout(hideToastTimer));
+
   // ---------------------------------------------------------------- what to show
   const focusId = () => selected || (current && current.id);
 
   // The node passes the filters (and is not shown only because it is open or selected)
-  const passesFilters = (n) => !options.hidden.includes(n.group) && (options.showOrphans || !n.isOrphan);
+  const passesFilters = (n) => !options.hidden.includes(n.group) && !options.hiddenNodes.includes(n.id) && (options.showOrphans || !n.isOrphan);
 
   function visibleIds() {
     const keepAlways = new Set([current && current.id, selected].filter(Boolean));
@@ -972,6 +1005,8 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       if (VIEW === "full") openCard(d.id);
       else if (!d.isCurrent) call("handleNavigate", d.id);
     });
+    // right click hides a page (a hub like “similar topics” that glues everything together); undo in the note
+    nodeSel.on("contextmenu", (event, d) => { event.preventDefault(); event.stopPropagation(); hidePage(d.id); });
     // touch screens have no hover: a tap opens the card and the highlight does not stick
     nodeSel.on("pointerenter", (e, d) => { if (!dragging && e.pointerType !== "touch") hoverSoon(d.id); })
       .on("pointerleave", (e) => { if (!dragging && e.pointerType !== "touch") hoverSoon(null); });
@@ -2046,6 +2081,18 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     other.appendChild(checkbox(T.marks[0], "marks", T.marks[1], () => restyle()));
     other.appendChild(segmented(T.nearDepth, "nearDepth", [[1, "1", ""], [2, "2", ""], [3, "3", ""]], () => refresh(true)));
     other.appendChild(checkbox(T.start[0], "startWithGraph", T.start[1]));
+    const hid = document.createElement("div");
+    hid.className = "cn-hidden-list";
+    hid.innerHTML = `<div class="cn-hint">${esc(T.hiddenPages)} — ${esc(T.hiddenHint)}</div>`;
+    if (!options.hiddenNodes.length) hid.innerHTML += `<div class="cn-hint">${esc(T.hiddenNone)}</div>`;
+    for (const id of options.hiddenNodes) {
+      const row = document.createElement("div");
+      row.className = "cn-hidden-row";
+      row.innerHTML = `<span title="${esc(id)}">${esc((nodeById.get(id) || { label: id }).label)}</span><button class="cn-icon" title="${esc(T.show)}">✕</button>`;
+      row.querySelector("button").addEventListener("click", () => setHiddenPages(options.hiddenNodes.filter((x) => x !== id)));
+      hid.appendChild(row);
+    }
+    other.appendChild(hid);
     const actions = document.createElement("div");
     actions.className = "cn-set-actions";
     actions.innerHTML = `<button class="cn-btn" data-act="relayout" title="${esc(T.relayout[1])}">${esc(T.relayout[0])}</button>
