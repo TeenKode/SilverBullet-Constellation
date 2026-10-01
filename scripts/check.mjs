@@ -253,6 +253,23 @@ async function main() {
     await fr.evaluate(() => document.querySelector(".cn-neb-label").dispatchEvent(new MouseEvent("click", { bubbles: true })));
     await page.waitForTimeout(700);
 
+    // “Nearby”: the page opened in the card and the steps around it
+    const shownCount = () => fr.evaluate(() => document.querySelectorAll(".cn-node:not(.cn-leaving)").length);
+    const wholeCount = await shownCount();
+    await openCard(page, fr, "People/Ann");
+    await fr.evaluate(() => [...document.querySelectorAll("#cn-toolbar button")].find((b) => /^(Nearby|Рядом)$/.test(b.textContent.trim())).click());
+    await page.waitForTimeout(1200);
+    const near2 = await shownCount();
+    await fr.evaluate(() => document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click());
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-set-row")].find((r) => /Nearby|Рядом/.test(r.textContent)).querySelectorAll("button")[0].click());
+    await page.waitForTimeout(1200);
+    const near1 = await shownCount();
+    check("nearby: fewer pages, and fewer with 1 step than with 2", near2 < wholeCount && near1 < near2, `${wholeCount} / 2 steps ${near2} / 1 step ${near1}`);
+    await fr.evaluate(() => [...document.querySelectorAll(".cn-set-row")].find((r) => /Nearby|Рядом/.test(r.textContent)).querySelectorAll("button")[1].click());
+    await fr.evaluate(() => [...document.querySelectorAll("#cn-toolbar button")].find((b) => /^(All|Вся база)$/.test(b.textContent.trim())).click());
+    await page.waitForTimeout(1200);
+    await fr.evaluate(() => document.querySelector(".cn-icon[data-act=close]")?.click());
+
     // right click hides a page (also out of the constellations); the note undoes it
     const nodeCount = () => fr.evaluate(() => document.querySelectorAll(".cn-node:not(.cn-leaving)").length);
     const before2 = await nodeCount();

@@ -72,7 +72,8 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const I18N = {
     en: {
-      title: "Graph", all: ["All", "Show all pages and links"], near: ["Nearby", "Only pages within two steps of the selected one"],
+      title: "Graph", all: ["All", "Show all pages and links"], near: ["Nearby", "Only pages a few steps (see the options) from the selected one"],
+      pickPage: "Nearby shows the surroundings of a page: click a node first",
       orphans: ["Orphans", "Show pages without links"], search: "Search…", fit: "Fit the graph to the window",
       settings: "Graph settings", closeGraph: "Close the graph (Esc)", timeline: "Timeline: which pages to show",
       since: (d) => `since ${d}`, allTime: "All time", allTimeHint: "Click to show all time", show: "Show", hide: "Hide",
@@ -125,7 +126,8 @@
       pages: (n) => `${n} pages`, nebulaCount: (n) => `Constellations: ${n}`, nebulaWait: "Counting similarity of texts…",
     },
     ru: {
-      title: "Граф связей", all: ["Вся база", "Показать все страницы и связи"], near: ["Рядом", "Только страницы в двух шагах от выбранной"],
+      title: "Граф связей", all: ["Вся база", "Показать все страницы и связи"], near: ["Рядом", "Только страницы в нескольких шагах (число — в параметрах) от выбранной"],
+      pickPage: "«Рядом» показывает окружение страницы: сначала нажмите на узел",
       orphans: ["Без связей", "Показать страницы без ссылок"], search: "Поиск…", fit: "Вписать граф в окно",
       settings: "Настройки графа", closeGraph: "Закрыть граф (Esc)", timeline: "Лента времени: какие страницы показывать",
       since: (d) => `с ${d}`, allTime: "Всё время", allTimeHint: "Нажмите — показать всё время", show: "Показать", hide: "Скрыть",
@@ -528,6 +530,18 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     options.mode = mode;
     saveOption("mode", mode);
     refresh(true);
+    nearHint();
+  }
+  // “Nearby” needs a page to be near to: in the full view that is the one opened in the card
+  function nearHint() {
+    if (options.mode !== "near" || focusId()) return;
+    if (hideToast) hideToast.remove();
+    clearTimeout(hideToastTimer);
+    hideToast = document.createElement("div");
+    hideToast.className = "cn-hide-toast";
+    hideToast.innerHTML = `<span>${esc(T.pickPage)}</span>`;
+    container.appendChild(hideToast);
+    hideToastTimer = setTimeout(() => { if (hideToast) hideToast.remove(); hideToast = null; }, 5000);
   }
 
   // Legend: group chips (redrawn) and the timeline (built once — the slider is not reset under the pointer)
@@ -2139,7 +2153,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     const other = section(T.other);
     other.appendChild(checkbox(T.fresh[0], "freshBright", T.fresh[1], () => restyle()));
     other.appendChild(checkbox(T.marks[0], "marks", T.marks[1], () => restyle()));
-    other.appendChild(segmented(T.nearDepth, "nearDepth", [[1, "1", ""], [2, "2", ""], [3, "3", ""]], () => refresh(true)));
+    other.appendChild(segmented(T.nearDepth, "nearDepth", [[1, "1", ""], [2, "2", ""], [3, "3", ""]], () => { refresh(true); nearHint(); }));
     other.appendChild(checkbox(T.start[0], "startWithGraph", T.start[1]));
     const hid = document.createElement("div");
     hid.className = "cn-hidden-list";
