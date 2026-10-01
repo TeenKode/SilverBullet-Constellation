@@ -173,7 +173,7 @@ async function main() {
       clusters.some((c) => garden.every((id) => c.members.includes(id))), clusters.map((c) => `${c.name}(${c.members.length})`).join(", "));
     check("day summaries are not in constellations", !clusters.some((c) => c.members.some((id) => /\d{4}-\d{2}-\d{2}$/.test(id))));
     check("starry background and twinkling", await fr.evaluate(() => document.querySelector("#cn-container").classList.contains("cn-starfield")
-      && document.querySelector("svg:not(.cn-neb-svg)").classList.contains("cn-twinkle")));
+      && document.querySelector("svg:not(.cn-neb-svg)").classList.contains("cn-twinkling")));
     // settings: nebulae off and on again
     await fr.evaluate(() => document.querySelector("#cn-toolbar button[title*='settings' i], #cn-toolbar button[title*='астройки' i]").click());
     await page.waitForTimeout(500);

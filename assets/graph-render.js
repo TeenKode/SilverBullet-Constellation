@@ -311,7 +311,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   function recluster() {
     clusterOf = new Map(); clusters = []; clusterById = new Map();
     if (!options.nebulae || !window.CNCluster) return;
-    const skip = new Set(all.nodes.filter((n) => n.periodic || n.noCluster || options.hiddenNodes.includes(n.id)).map((n) => n.id));
+    const skip = new Set(all.nodes.filter((n) => n.periodic || n.noCluster || options.hiddenNodes.includes(n.id) || options.hidden.includes(n.group)).map((n) => n.id));
     const r = window.CNCluster.detect({
       ids: all.nodes.map((n) => n.id), links: all.edges.map((e) => [e.source, e.target]), sims: simData, skip,
       textWeight: options.textWeight / 100, similarity: options.similarity / 100,
@@ -360,6 +360,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     return force;
   }
   recluster();
+  window.__CN_HUBS__ = () => hubPages.slice();
   window.__CN_CLUSTERS__ = () => clusters.map((c) => ({ id: c.id, name: c.name, members: c.members.slice() }));   // for the checks
 
   // Radius — by links in the whole space, not in the visible part: filters do not resize nodes
@@ -610,6 +611,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         options.hidden = off ? options.hidden.filter((x) => x !== g.id) : options.hidden.concat([g.id]);
         saveOption("hidden", options.hidden);
         refresh(false);
+        applyClusters(false);          // pages of a hidden group (service pages) take no part in constellations
       });
       chipsBox.appendChild(chip);
     }
@@ -724,6 +726,24 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
   const floating = () => options.motion === "float" && shown.length <= 500;
   const offX = (d) => (floating() ? FLOAT_AMP * Math.sin(floatT * (0.55 + d.freq) + d.phase) : 0);
   const offY = (d) => (floating() ? FLOAT_AMP * Math.cos(floatT * (0.45 + d.freq * 0.8) + d.phase * 1.7) : 0);
+  let twinkleJs = false, twinkleItems = null;
+  // per star: its own period, phase and depth (the same hashes as the CSS animation would take), two waves of different
+  // frequency make the blinking irregular
+  function twinkleStep(t) {
+    if (!twinkleItems) {
+      twinkleItems = [];
+      nodeSel.each(function (d) {
+        twinkleItems.push({ ray: this.querySelector(".cn-rays"), halo: this.querySelector(".cn-halo"),
+          per: parseFloat(twinkleTime(d.id + "*")), ph: hash01(d.id + "~") * 40, lo: 0.1 + hash01(d.id + "%") * 0.4 });
+      });
+    }
+    for (const it of twinkleItems) {
+      const a = 2 * Math.PI * (t + it.ph) / it.per;
+      const w = 0.5 + 0.5 * (Math.sin(a) + 0.5 * Math.sin(2.3 * a + 1)) / 1.5;      // 0..1
+      if (it.ray) it.ray.style.fillOpacity = (0.9 - (0.9 - it.lo) * w).toFixed(2);
+      if (it.halo) it.halo.style.opacity = (0.4 * w).toFixed(2);
+    }
+  }
   let rafId = 0, lastFrame = 0;
   function floatLoop(now) {
     rafId = 0;
@@ -732,6 +752,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
       lastFrame = now;
       floatT = now / 1000;
       if (!dragging) place(true);
+      if (twinkleJs) twinkleStep(floatT);
     }
     rafId = requestAnimationFrame(floatLoop);
   }
@@ -1015,6 +1036,7 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
         (up) => up.classed("cn-leaving", false),
         (ex) => ex.call(leave))
       .order();
+    twinkleItems = null;
     place();
     drawNebulae();
     drawSims();
@@ -1339,10 +1361,21 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     }
   }
 
+  // The nebula filter (noise + blur) is recomputed at each move of a circle: while the physics runs (60 ticks a second)
+  // the clouds follow at most 10 times a second, and once more when the physics is calm
+  let nebAt = 0, nebTimer = 0;
+  function placeNebulaeSoon() {
+    const now = performance.now();
+    clearTimeout(nebTimer);
+    if (now - nebAt > 100) { nebAt = now; placeNebulae(); return; }
+    nebTimer = setTimeout(() => { nebAt = performance.now(); placeNebulae(); }, 110);
+  }
+  cleanup.push(() => clearTimeout(nebTimer));
+
   function place(fromFloat) {
     if (!linkSel) return;
     // nebulae and constellation names ignore the ±3.5 px drift: they are soft anyway, and re-blurring 30 times a second is costly
-    if (!fromFloat) placeNebulae();
+    if (!fromFloat) placeNebulaeSoon();
     if (simSel) simSel.attr("x1", (d) => px(d.source)).attr("y1", (d) => py(d.source)).attr("x2", (d) => px(d.target)).attr("y2", (d) => py(d.target));
     linkSel.attr("x1", (d) => px(d.source)).attr("y1", (d) => py(d.source))
       .attr("x2", (d) => px(d.target)).attr("y2", (d) => py(d.target));
@@ -1620,7 +1653,15 @@ const LAYOUT_KEY = spaceKey("constellation.layout.v3");
     }
     // twinkling glow of the stars: only where it is not heavy
     const twinkling = options.twinkle && options.motion !== "still" && shown.length <= 300;
-    svg.classed("cn-twinkle", twinkling);
+    // while the nodes drift, the twinkle is written in the same frame as their moves (one repaint instead of two
+    // independent ones: CSS animations running beside the drift made the picture crawl); otherwise — CSS animation
+    twinkleJs = twinkling && floating();
+    svg.classed("cn-twinkle", twinkling && !twinkleJs);
+    svg.classed("cn-twinkling", twinkling);
+    if (!twinkleJs && twinkleItems) {
+      for (const it of twinkleItems) { if (it.ray) it.ray.style.fillOpacity = ""; if (it.halo) it.halo.style.opacity = ""; }
+      twinkleItems = null;
+    }
     nodeSel.select("circle.cn-halo")
       .attr("r", (d) => radius(d) + 5)
       .style("fill", (d) => colorOf(d))
